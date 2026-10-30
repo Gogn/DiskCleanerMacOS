@@ -37,7 +37,3 @@
 - State signing, notarization, OS, architecture, and Trash-test status precisely. Do not recommend globally disabling Gatekeeper.
 - The current GitHub owner/remote is `Gogn`; verify the configured remote and active identity before release actions. Do not hardcode a personal email or store credentials/secrets in the repository.
 - Follow Git and publication authorization already provided by the current task and prior conversation. Necessary steps of an explicitly authorized release are covered by that authorization; do not request repeated confirmation. Do not infer release authorization from an ordinary code or documentation task.
-
-## Collaboration preferences
-
-- When delegation is authorized and useful, the user prefers the main coordinator to assign implementation work to separate agents: fast for small tasks, medium for regular tasks, and `gpt-6-astra` with `high` reasoning for careful, complex work (explicit user preference). Do not require three agents for every task.
