@@ -4,8 +4,10 @@ import (
 	"diskcleaner/internal/scan"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
+	"time"
 )
 
 func entryNames(m *Model) string {
@@ -28,15 +30,22 @@ func TestSortTogglePreservesTargetsAndSnapshot(t *testing.T) {
 	}})
 	m.Key("space")
 	target := m.Selected[listing[0].Path]
+	snapshot := copySnapshot(m.Snapshot)
+	lastScanAt := m.LastScanAt
+	cache := make(map[string]cachedScan, len(m.scanCache))
+	for root, cached := range m.scanCache {
+		cached.snapshot = copySnapshot(cached.snapshot)
+		cache[root] = cached
+	}
 	if job := m.Key("t"); job != nil {
 		t.Fatal("sorting started work")
 	}
 	current, _ := m.current()
-	if !m.SortBySize || m.Entries[0].Path != listing[1].Path || current.Path != target.Path || m.Selected[target.Path] != target {
-		t.Fatal("sorting changed the highlighted or selected target")
+	if !m.SortBySize || m.Entries[0].Path != listing[1].Path || current.Path != listing[1].Path || m.Selected[target.Path] != target {
+		t.Fatal("sorting did not highlight the first entry or changed the selected target")
 	}
-	if m.Snapshot.Listing[0].Path != listing[0].Path || !m.Scanned {
-		t.Fatal("sorting modified the scan snapshot")
+	if !reflect.DeepEqual(m.Snapshot, snapshot) || !m.Scanned || !m.LastScanAt.Equal(lastScanAt) || !reflect.DeepEqual(m.scanCache, cache) {
+		t.Fatal("sorting modified the scan snapshot, time or cache")
 	}
 	m.Key("d")
 	if len(m.Confirmed) != 1 || m.Confirmed[0] != target {
@@ -50,6 +59,66 @@ func TestSortTogglePreservesTargetsAndSnapshot(t *testing.T) {
 	m.Key("t")
 	if m.SortBySize || m.Cursor != 0 || m.Entries[0].Path != target.Path {
 		t.Fatal("alphabetical order or cursor was not restored")
+	}
+}
+
+func TestSortToggleHighlightsFirstVisibleEntryInBothDirections(t *testing.T) {
+	for _, scanned := range []bool{false, true} {
+		for _, bySize := range []bool{false, true} {
+			m := fixture(t)
+			m.Entries = []scan.Entry{
+				{Name: ".needle-hidden", Path: filepath.Join(m.Root, ".needle-hidden")},
+				{Name: "aaa-other", Path: filepath.Join(m.Root, "aaa-other")},
+				{Name: "needle-a-file", Path: filepath.Join(m.Root, "needle-a-file")},
+				{Name: "needle-z-dir", Path: filepath.Join(m.Root, "needle-z-dir"), IsDir: true},
+			}
+			m.Snapshot.Entries = map[string]scan.Measurement{}
+			for i, bytes := range []uint64{1000, 500, 10, 100} {
+				m.Snapshot.Entries[m.Entries[i].Path] = scan.Measurement{Bytes: bytes, State: scan.Complete}
+			}
+			m.Scanned, m.SortBySize, m.HideHidden, m.Filter = scanned, bySize, true, "needle"
+			if scanned {
+				m.LastScanAt = time.Now()
+			}
+			m.sortEntries()
+			visible := m.visibleIndices()
+			m.Cursor = visible[len(visible)-1]
+			snapshot, lastScanAt := copySnapshot(m.Snapshot), m.LastScanAt
+			if job := m.Key("t"); job != nil {
+				t.Fatal("sorting started work")
+			}
+			want := "needle-a-file"
+			if scanned && m.SortBySize {
+				want = "needle-z-dir"
+			}
+			current, ok := m.current()
+			if !ok || current.Name != want || m.Cursor != m.visibleIndices()[0] {
+				t.Fatalf("scanned=%v initial size=%v: highlighted %q, want first visible %q", scanned, bySize, current.Name, want)
+			}
+			if m.Filter != "needle" || !m.HideHidden || m.Scanned != scanned || !reflect.DeepEqual(m.Snapshot, snapshot) || !m.LastScanAt.Equal(lastScanAt) {
+				t.Fatal("sort toggle changed visibility or scan state")
+			}
+		}
+	}
+}
+
+func TestSortToggleWithNoVisibleEntries(t *testing.T) {
+	for _, empty := range []bool{false, true} {
+		m := fixture(t)
+		if empty {
+			m.Entries = nil
+		} else {
+			m.setFilter("no matching item")
+		}
+		for _, wantSize := range []bool{true, false} {
+			m.Cursor = 999
+			if job := m.Key("t"); job != nil || m.SortBySize != wantSize || m.Cursor != 0 {
+				t.Fatal("sorting an empty visible list did not normalize safely")
+			}
+			if _, ok := m.current(); ok {
+				t.Fatal("sorting exposed an invisible entry")
+			}
+		}
 	}
 }
 
@@ -75,7 +144,7 @@ func TestSizeSortOrdersTiesAndUnmeasuredItems(t *testing.T) {
 		m.Snapshot.Entries[path] = scan.Measurement{Bytes: item.size, State: item.state}
 	}
 	m.Entries = append(m.Entries, scan.Entry{Path: filepath.Join(m.Root, "missing"), Name: "missing"})
-	m.Settings.Masks[m.Root] = []string{"excluded"}
+	m.Settings.Masks = []string{"excluded"}
 	m.Scanned = true
 	m.Key("t")
 	if got := entryNames(m); got != "Alpha,beta,zero,excluded,missing,pending,skipped,unknown" {

@@ -12,36 +12,40 @@ var helpTopics = []struct {
 }{
 	{"Quick start", []string{
 		"1. BROWSE", "Open a folder with Enter. Nothing is scanned automatically.",
-		"2. CHOOSE EXCLUSIONS (OPTIONAL)", "Press e to review suggestions or add a pattern. All suggestions start unchecked unless previously saved.",
+		"2. CHOOSE EXCLUSIONS (OPTIONAL)", "Press e to edit the global list. Changes apply when scanning any selected folder or disk.",
 		"3. SCAN", "Press s, then Enter. Wait for sizes; Esc cancels.",
 		"4. SELECT", "Move to an item and press Space: [ ] becomes [x]. Selecting alone does not delete anything.",
 		"5. REVIEW AND CLEAN", "p opens an optional dry run. d shows the exact selected paths and mode; Enter confirms, Esc cancels.",
 		"HELP TOPICS", "1 Quick start   2 Browsing   3 Scanning", "4 Exclusions    5 Cleanup    6 Display & keys",
 	}},
 	{"Browsing", []string{
-		"NAVIGATION", "Up/Down or k/j  Move through visible items", "Enter / Right  Open the highlighted folder", "Left           Go to the parent folder", "r              Enter an absolute path, ~, or a relative path", "v              Show the full path and diagnostics",
-		"SORTING", "t switches Alphabetical (default) and Size (largest first). Ties use name order; unknown/excluded sizes go last. Sorting keeps the same highlighted item and selections.",
+		"NAVIGATION", "Up/Down or k/j  Move one visible item", "PgUp/PgDn       Move one visible viewport", "Home/End        First/last visible item", "Enter / Right  Open the highlighted folder", "Left           Go to the parent folder", "r              Enter an absolute path, ~, or a relative path", "v              Show the full path and diagnostics",
+		"SORTING", "t switches Alphabetical (default) and Size (largest first), moving the cursor to the first visible item. Selections and the current scan stay intact. Ties use name order; unknown/excluded sizes go last. Automatic sorting keeps the established cursor history.",
 		"FILTERING", "/ starts a case-insensitive name filter in the current folder. Enter applies it; Esc clears it. Filtering does not scan or change selections.",
 		"HIDDEN FILES", ". toggles dot-prefixed files and folders. They are shown by default. This changes the list only: hidden files still participate in scans and cleanup.",
 		"HIDDEN SELECTIONS", "Items hidden by a filter or the dot-file toggle stay selected. Their count stays visible, and cleanup confirmation includes them.",
-		"Changing folders clears the scan, selections, and text filter. The hidden-file preference and sort mode last for this session.",
+		"Changing folders clears selections and the text filter. Each visited folder remembers its highlighted path; missing or hidden items fall back to a visible item. Going up highlights the folder just left, even on the parent's first visit. Failed navigation preserves the current folder and history. History lasts until exit.",
 	}},
 	{"Scanning & sizes", []string{
-		"START / CANCEL", "s, then Enter  Scan all immediate items in this folder", "Esc / Ctrl+C   Cancel ongoing work and wait for it to finish",
+		"START / CANCEL", "s, then Enter  Measure each immediate item, including nested contents", "Esc / Ctrl+C   Cancel ongoing work and wait for it to finish",
 		"PROGRESS", "Current path, elapsed time, and processed/total item counts are shown. Skipped items count as processed. One large folder can take longer than many small files, so there is no percentage or ETA.",
 		"SIZE LABELS", "Complete      Allocated disk space measured successfully", "Partial       Available size; some contents could not be measured", "Size unknown  No reliable measurement, not a zero-byte item", "Excluded      Skipped by a name pattern", "Skipped       Not measured, for example on a different volume",
 		"USAGE BARS", "Bars compare an item with the largest measured item in the folder, not the whole disk. Partial bars remain estimates. Unknown and excluded items have no bar.",
 		"Scans do not follow symbolic links or cross into another volume. Open a volume directly to scan it.",
-		"Sizes and selections clear after changing folders, changing exclusions, or attempting cleanup. Start another scan when needed.",
+		"s opens confirmation and clears previous browser notifications, then Enter refreshes this folder. New errors and cancellation messages remain visible. Each folder size includes nested contents; open and scan it to list its children separately.",
+		"Last scan keeps the original successful completion time when returning to cached results; a successful rescan replaces it. Unknown/partial counts include all current entries, even filtered or hidden ones; excluded and skipped entries are omitted. The header shows it when space allows and may say Incomplete. v shows the full date, time and counts.",
+		"Successful scans are cached only until exit. Returning refreshes the listing and reuses measurements only for matching paths, types, identities, sizes and modification times. New, changed or replaced items show unknown sizes; a replaced root gets no old cache. Nested changes may escape these checks, so rescan for fresh sizes.",
+		"Changing global exclusions or completing a cleanup attempt clears all cached sizes and scan times. A failed or cancelled rescan clears only this folder's cache and never publishes partial results. Closing cleanup confirmation without starting it keeps the cache.",
 	}},
 	{"Exclusions", []string{
+		"QUICK EXCLUSION", "E (Shift+E) adds the highlighted file or folder name to exclusions without opening the editor. Repeating E removes that name exclusion. If another pattern still excludes it, press e to edit patterns. x toggles a folder name exclusion.",
 		"CHECKBOX LIST", "e             Open saved patterns and suggestions", "Up/Down       Choose a pattern (PgUp/PgDn moves faster)", "Space / Enter Enable or disable the highlighted pattern", "a / Tab       Focus Add pattern / switch input and list", "Enter (input) Add the typed pattern", "Esc           Cancel input first, then close the editor",
-		"WHAT GETS EXCLUDED?", "Patterns match names at every depth in the current root. Matching folders include their entire contents. Rules save automatically for this root and are not inherited when opening another folder.",
+		"WHAT GETS EXCLUDED?", "The same global list matches descendant names below any chosen scan root. Matching folders encountered there include their contents. The root's own name and its ancestors are not matched: after entering an excluded folder directly, a manual scan measures its children. Editing anywhere changes the shared list; there are no per-folder lists, overrides, or inheritance.",
 		"PATTERN EXAMPLES", "node_modules  Exact name, including nested matches", "*.tmp         Any name ending in .tmp", "?ache         One character followed by ache", "Use a backslash to escape a literal * or ?. Paths containing / are not patterns.",
 		"SUGGESTIONS", "Dependencies: node_modules, .venv, venv, vendor", "Cloud and history: CloudStorage, .git", "Caches: __pycache__, .cache, Caches, .gradle", "Build output: .next, .build, DerivedData, target, dist, build",
 		"Nothing is enabled automatically. Read the description under the highlighted pattern. Broad names such as build match every occurrence, including unrelated folders.",
-		"Exclusions skip analysis and block cleanup of matching objects. A selected parent containing an excluded object is also blocked. Disable a pattern and rescan if you intend to inspect or clean those items.",
-		"Changing exclusions clears sizes and selections. Unchecked custom patterns remain available until the editor closes.",
+		"Matching descendants are skipped during analysis and blocked from cleanup, including through a selected parent. These name rules do not forbid entering a matching folder directly. Built-in system protection still applies. Disable a pattern and rescan to inspect or clean matched items.",
+		"Changes save automatically and clear all cached sizes, scan times and selections. If saving fails, rules still apply this session but may be lost after exit. Older per-folder lists are merged when loaded; the next normal save writes the global list. Unchecked custom patterns stay until the editor closes.",
 	}},
 	{"Cleanup", []string{
 		"SELECT AND REVIEW", "Space  Toggle an item after scanning: [ ] / [x]", "p      Optional dry run; no files are changed", "d      Review all selected paths and the deletion mode", "Enter  Execute once, only from the confirmation screen", "Esc    Close confirmation and keep your selection", "l      Reopen the last cleanup report",
@@ -54,7 +58,9 @@ var helpTopics = []struct {
 	{"Display & keys", []string{
 		"CURSOR VS SELECTION", "Muted blue background / › marker: current row", "[ ]: not selected for cleanup", "[x]: selected for cleanup; in exclusions, pattern enabled", "Moving the cursor never changes a checkbox.",
 		"COLORS", "Cyan: headings and the current folder path", "Green: selected items or completed actions", "Yellow: exclusions, partial or unknown sizes", "Red: no exclusions (optional), failures, or permanent deletion", "Warning colors stay visible under the cursor. NO_COLOR=1 disables colors without changing the controls.",
-		"LAYOUT", "The folder path stays directly above the file columns. Status and action hints remain fixed while items scroll. Below 64 columns, each item uses two rows. Minimum browser size: 32 x 12.",
+		"LAYOUT", "The compact header omits a separate title and 0 selected. The highlighted path stays directly above the columns. Selection, hidden-selection warnings, estimates, filters, diagnostics and exclusions take priority; optional sort and scan-time rows may be omitted. Below 64 columns each entry uses two lines; 32 x 12 still fits one complete entry.",
+		"The browser has two footer lines: stable navigation for the window width, then actions for the current scan/selection state. Commands are whole key/action labels; lower-priority hints are omitted instead of clipped. Selected items keep preview and cleanup hints. Filter input shows Enter apply and Esc clear; ? is literal there. v shows full paths, diagnostics and scan status.",
+		"Lines appears only when text overflows on scrollable help, details, preview, cleanup confirmation/report or path input. A narrow screen may show More. Scan/working screens, scan confirmation and settings have no text-scroll indicator. Browser and exclusion lists keep their separate Rows counter.",
 		"Long names and paths are shortened; v shows them in full. Names have no surrounding quotation marks. Special characters remain escaped, such as \\n for a newline, to keep the terminal safe.",
 		"HELP AND EXIT", "? / h          Open help (typed literally in text fields)", "Left/Right/Tab Switch help topics; 1-6 jumps directly", "Up/Down/PgUp/PgDn scroll; Home/End go to top/bottom", "Esc / ? / h    Return to the previous screen", "q              Quit from the browser", "Ctrl+C         Cancel work; otherwise quit",
 	}},
@@ -102,15 +108,25 @@ func (m *Model) renderHelp() (string, int) {
 		}
 	}
 	footer := []string{"Left/Right/Tab topics | 1-6 jump", "Up/Down scroll | Esc / ? back"}
-	available := m.Height - len(header) - len(footer) - 1
+	available := m.Height - len(header) - len(footer)
+	showIndicator := len(body) > available
+	if showIndicator {
+		available--
+	}
 	limit := max(0, len(body)-available)
 	start := min(max(0, m.Offset), limit)
 	end := min(len(body), start+available)
 	result := append(header, body[start:end]...)
-	for len(result) < m.Height-len(footer)-1 {
+	reserved := len(footer)
+	if showIndicator {
+		reserved++
+	}
+	for len(result) < m.Height-reserved {
 		result = append(result, "")
 	}
-	result = append(result, fit(fmt.Sprintf("Lines %d-%d / %d | PgUp/PgDn scroll", start+1, end, len(body)), m.Width))
+	if showIndicator {
+		result = append(result, fit(fmt.Sprintf("Lines %d-%d / %d | PgUp/PgDn scroll", start+1, end, len(body)), m.Width))
+	}
 	result = append(result, footer...)
 	return strings.Join(result, "\n"), limit
 }

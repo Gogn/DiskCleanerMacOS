@@ -77,7 +77,7 @@ func TestUnifiedMasksAddToggleAndKeepUncheckedCustomPattern(t *testing.T) {
 	}
 	m.Key("space")
 	saved, err := config.Load(m.ConfigPath)
-	if err != nil || len(saved.Masks[m.Root]) != 1 || saved.Masks[m.Root][0] != "cache?" {
+	if err != nil || len(saved.Masks) != 1 || saved.Masks[0] != "cache?" {
 		t.Fatal("toggle not persisted", err)
 	}
 	m.Key("a")
@@ -107,7 +107,7 @@ func TestBrowserFixedFrameColumnsColorsAndContext(t *testing.T) {
 	m.Cursor = 39
 	view := m.View()
 	lines := strings.Split(plainView(view), "\n")
-	if len(lines) != 24 || !strings.Contains(lines[0], "Sort:") || !strings.HasSuffix(lines[4], "/root") || !strings.Contains(lines[2], "Selected size") || !strings.Contains(lines[3], "No exclusions") {
+	if len(lines) != 24 || !strings.Contains(lines[0], "Sort:") || !strings.HasSuffix(lines[1], "/root") || !strings.Contains(lines[0], "No exclusions") || strings.Contains(lines[0], "0 selected") {
 		t.Fatal("header moved with cursor", view)
 	}
 	for _, want := range []string{"Name", "Size", "Status", "[######]", "\x1b[37;48;2;38;52;69m", "Space select"} {

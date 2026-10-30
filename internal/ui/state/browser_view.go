@@ -43,73 +43,147 @@ func (m *Model) rowStyle(color string, current bool, text string) string {
 	return m.paint(color, text)
 }
 
-func (m *Model) browserFooter() []string {
-	if m.Screen == "filter" {
-		return []string{"Type name | Enter apply | Esc clear", "Filtering current folder only"}
-	}
-	actions := "Enter open | s scan | e exclusions"
-	if m.Scanned {
-		actions = "Space select | s rescan | e exclusions"
-		if len(m.Selected) > 0 {
-			actions = "Space select | p preview | d cleanup"
+// Commands are whole tokens: a narrow footer never cuts a key or its label.
+func commandLine(width int, commands ...string) string {
+	line := ""
+	for _, command := range commands {
+		candidate := command
+		if line != "" {
+			candidate = line + " | " + command
+		}
+		if cells(candidate) <= width {
+			line = candidate
 		}
 	}
-	if m.Width >= 64 {
-		actions += " | <- parent | q quit"
-	}
-	if m.Width < 40 {
-		actions = "Enter open | s scan | e exclude"
-		if m.Scanned {
-			actions = "Space mark | s scan | e exclude"
-		}
-		if m.Scanned && len(m.Selected) > 0 {
-			actions = "Space mark | p preview | d clean"
-		}
-		return []string{actions, "? help | t sort | / find | . hide"}
-	}
-	if m.Width < 64 {
-		return []string{actions, "v info | ? help | t sort | / | . hidden"}
-	}
-	return []string{actions, "v details | ? help | t sort | / filter | . hidden files"}
+	return line
 }
 
-func (m *Model) renderBrowser() (string, int) {
-	w, h := m.Width, m.Height
-	if w < 32 || h < 12 {
-		return "Resize to at least 32 x 12", 0
+func (m *Model) browserFooter() []string {
+	if m.Screen == "filter" {
+		return []string{"Enter apply | Esc clear", "Type to filter this folder"}
 	}
-	visible := m.visibleIndices()
-	header := []string{
-		m.paint(cyan, fit("DISKCLEANER | Sort: "+m.sortLabel(), w)),
-		fit(fmt.Sprintf("%d items | %d selected", len(m.Entries), len(m.Selected)), w),
-		fit(estimate(m.Settings.Mode, m.targets(), m.Snapshot), w),
-		m.browserVisibilityStatus(),
+	nav := "Enter open | ← parent | ? help"
+	if m.Width >= 64 {
+		nav = commandLine(m.Width, "↑↓ move", "Enter open", "← parent", "? help", "PgUp/PgDn page", "Home/End", "q quit")
+	} else if m.Width >= 40 {
+		nav = commandLine(m.Width, "Enter open", "← parent", "? help", "q quit")
 	}
-	if m.Filter != "" || m.Screen == "filter" || m.HideHidden {
-		header[1] = fit(fmt.Sprintf("%d/%d shown | %d selected (%d hidden)", len(visible), len(m.Entries), len(m.Selected), m.hiddenSelections()), w)
+	mark, exclude, clean, details := "Space mark", "e exclude", "d clean", "v info"
+	if m.Width >= 64 {
+		mark, exclude, clean, details = "Space select", "e exclusions", "d cleanup", "v details"
 	}
-	if m.Filter != "" || m.Screen == "filter" {
-		header = append(header, "Filter: "+tailFit(Safe(m.Filter), w-20)+" | Esc clear")
-	}
-	footer := m.browserFooter()
-	for i := range footer {
-		footer[i] = fit(footer[i], w)
-	}
-	columnHeader, rows, currentRow := m.browserRows(visible)
-	if diagnostics := m.diagnostics(); len(diagnostics) > 0 {
-		available := h - len(header) - len(footer) - 4
-		if available > 0 {
-			// Full messages remain accessible on the details screen.
-			text := strings.Join(diagnostics, " | ")
-			if cells(text) > w {
-				text = fit(text, w-len(" | v details")) + " | v details"
-			}
-			header = append(header, text)
+	actions := []string{"s scan", exclude, details, "t sort", "/ filter", ". hidden", "E exclude"}
+	if m.Scanned {
+		actions = []string{mark, "s rescan", details, exclude, "t sort", "/ filter", ". hidden", "E exclude"}
+		if len(m.Selected) > 0 {
+			actions = []string{mark, "p preview", clean, details, exclude, "t sort", "/ filter", ". hidden", "E exclude"}
 		}
 	}
-	// The current path sits immediately above the columns, even with a filter
-	// or diagnostics, and remains fixed while the item area scrolls.
-	header = append(header, m.paint("1;36", tailFit(Safe(m.Root), w)), m.paint(cyan, columnHeader))
+	return []string{nav, commandLine(m.Width, actions...)}
+}
+
+type browserLayout struct {
+	header, rows, footer []string
+	cursor               int
+}
+
+func (m *Model) browserLayout() browserLayout {
+	w := m.Width
+	visible := m.visibleIndices()
+	columns, rows, cursor := m.browserRows(visible)
+	footer := m.browserFooter()
+	span := 1
+	if w < 64 {
+		span = 2
+	}
+	// Reserve a complete entry, the path, columns, row counter and both footers.
+	budget := m.Height - len(footer) - 3 - span
+	count := fmt.Sprintf("%d items", len(m.Entries))
+	if m.Filter != "" || m.Screen == "filter" || m.HideHidden {
+		count = fmt.Sprintf("%d/%d shown", len(visible), len(m.Entries))
+	}
+	primary := count
+	if len(m.Selected) > 0 {
+		primary += fmt.Sprintf(" | %d selected", len(m.Selected))
+	}
+	if hidden := m.hiddenSelections(); hidden > 0 {
+		primary += fmt.Sprintf(" | %d hidden", hidden)
+		if cells(primary) > w {
+			primary = fmt.Sprintf("%d selected | %d hidden", len(m.Selected), hidden)
+		}
+	}
+	primary = fit(primary, w)
+	required := []string{}
+	if len(m.Selected) > 0 {
+		summary := estimate(m.Settings.Mode, m.targets(), m.Snapshot)
+		if cells(summary) > w {
+			summary = strings.Replace(summary, "Estimated space to reclaim: ", "Est. reclaim: ", 1)
+			summary = strings.Replace(summary, "Selected size: ", "Selected: ", 1)
+			summary = strings.Replace(summary, "Size unknown · Unknown", "Size unknown", 1)
+		}
+		required = append(required, fit(summary, w))
+	}
+	filter := ""
+	if m.Filter != "" || m.Screen == "filter" {
+		filter = "Filter: " + tailFit(Safe(m.Filter), w-8)
+		required = append(required, filter)
+	}
+	diagnostic := ""
+	if diagnostics := m.diagnostics(); len(diagnostics) > 0 {
+		diagnostic = strings.Join(diagnostics, " | ")
+		if cells(diagnostic) > w {
+			diagnostic = fit(diagnostic, w-len(" | v details")) + " | v details"
+		}
+		required = append(required, diagnostic)
+	}
+	// Keep metadata in the same row when it fits; otherwise prefer complete
+	// compact tokens over squeezing an unreadable status into the header.
+	sortText := "Sort: Name"
+	if m.SortBySize {
+		sortText = "Sort: " + m.sortLabel()
+	}
+	exclusions := "No exclusions"
+	if len(m.Masks()) > 0 {
+		exclusions = fmt.Sprintf("%d exclusions", len(m.Masks()))
+		exclusions = m.paint(green, exclusions)
+	} else {
+		exclusions = m.paint(red, exclusions)
+	}
+	visibility := "Hidden shown"
+	if m.HideHidden {
+		visibility = "Hidden off"
+	}
+	meta := []string{exclusions, visibility, sortText}
+	extra := []string{}
+	for _, token := range meta {
+		if cells(primary+" | "+token) <= w {
+			primary += " | " + token
+			continue
+		}
+		if len(extra) > 0 && cells(extra[len(extra)-1]+" | "+token) <= w {
+			extra[len(extra)-1] += " | " + token
+		} else {
+			extra = append(extra, token)
+		}
+	}
+	room := max(0, budget-1-len(required))
+	if len(extra) > room {
+		extra = extra[:room]
+	}
+	header := []string{primary}
+	for _, line := range extra {
+		header = append(header, line)
+	}
+	if m.Scanned && !m.LastScanAt.IsZero() && len(header)+len(required) < budget {
+		// Full date and completeness remain available in item details.
+		status := m.scanStatus(false)
+		if cells(status) > w {
+			status = "Scan " + m.LastScanAt.Local().Format("15:04") + " | Incomplete"
+		}
+		header = append(header, status)
+	}
+	header = append(header, required...)
+	header = append(header, m.paint("1;36", tailFit(Safe(m.Root), w)), m.paint(cyan, columns))
 	if len(rows) == 0 {
 		message := "This folder is empty."
 		if m.Filter != "" {
@@ -119,19 +193,27 @@ func (m *Model) renderBrowser() (string, int) {
 		}
 		rows = []string{fit(message, w)}
 	}
-	return m.fixedList(header, rows, currentRow, footer)
+	return browserLayout{header: header, rows: rows, footer: footer, cursor: cursor}
 }
 
-func (m *Model) browserVisibilityStatus() string {
-	visibility := "shown"
-	if m.HideHidden {
-		visibility = "hidden"
+func (m *Model) browserPageSize() int {
+	if m.Width < 32 || m.Height < 12 {
+		return 1
 	}
-	text, color := "No exclusions", red
-	if len(m.Masks()) > 0 {
-		text, color = fmt.Sprintf("%d exclusions", len(m.Masks())), green
+	layout := m.browserLayout()
+	span := 1
+	if m.Width < 64 {
+		span = 2
 	}
-	return m.paint(color, fit(text+" | Hidden: "+visibility, m.Width))
+	return max(1, m.listRowCapacity(layout.header, layout.footer, span)/span)
+}
+
+func (m *Model) renderBrowser() (string, int) {
+	if m.Width < 32 || m.Height < 12 {
+		return "Resize to at least 32 x 12", 0
+	}
+	layout := m.browserLayout()
+	return m.fixedList(layout.header, layout.rows, layout.cursor, layout.footer)
 }
 
 func (m *Model) browserRows(visible []int) (string, []string, int) {
@@ -208,17 +290,72 @@ func (m *Model) browserRows(visible []int) (string, []string, int) {
 	return fit(heading, m.Width), rows, currentRow
 }
 
-// Headers and footers are fixed; only the item area follows the cursor.
-func (m *Model) fixedList(header, rows []string, cursor int, footer []string) (string, int) {
-	available := m.Height - len(header) - len(footer) - 1
-	if available < 1 {
-		return "Resize to show the list", 0
+func (m *Model) scanStatus(full bool) string {
+	unknown, partial := 0, 0
+	for _, entry := range m.Entries {
+		if ignore.Any(m.Masks(), entry.Name) {
+			continue
+		}
+		measurement, ok := m.Snapshot.Entries[entry.Path]
+		if !ok {
+			unknown++
+			continue
+		}
+		switch measurement.State {
+		case scan.Unknown, scan.Pending:
+			unknown++
+		case scan.Partial:
+			partial++
+		case scan.Skipped:
+			// Skipped entries are intentionally omitted from completeness counts.
+		}
 	}
+	if full {
+		text := "Last scan: " + m.LastScanAt.Local().Format("2006-01-02 15:04:05 MST")
+		if unknown == 0 && partial == 0 {
+			return text + " | Complete"
+		}
+		if unknown > 0 {
+			text += fmt.Sprintf(" | %d unknown", unknown)
+		}
+		if partial > 0 {
+			text += fmt.Sprintf(" | %d partial", partial)
+		}
+		return text
+	}
+	text := "Last scan " + m.LastScanAt.Local().Format("15:04")
+	if m.Width < 64 {
+		text = "Scan " + m.LastScanAt.Local().Format("15:04")
+	}
+	if unknown == 0 && partial == 0 {
+		return text + " | Complete"
+	}
+	if unknown > 0 {
+		text += fmt.Sprintf(" | %d unknown", unknown)
+	}
+	if partial > 0 {
+		text += fmt.Sprintf(" | %d partial", partial)
+	}
+	return text
+}
+
+// Headers and footers are fixed; only the item area follows the cursor.
+func (m *Model) listRowCapacity(header, footer []string, span int) int {
+	available := m.Height - len(header) - len(footer) - 1
+	return max(0, available/span*span)
+}
+
+func (m *Model) fixedList(header, rows []string, cursor int, footer []string) (string, int) {
 	span := 1
 	if (m.Screen == "list" || m.Screen == "filter" || m.Screen == "") && m.Width < 64 && len(rows) > 1 {
 		span = 2
 	}
+	available := m.listRowCapacity(header, footer, span)
+	if available < span {
+		return "Resize to show the list", 0
+	}
 	start := max(0, cursor+min(span, available)-available)
+	start = (start + span - 1) / span * span
 	start = min(start, max(0, len(rows)-available))
 	end := min(len(rows), start+available)
 	result := append([]string{}, header...)
@@ -236,7 +373,7 @@ func (m *Model) renderMasks() (string, int) {
 	if w < 32 || m.Height < 12 {
 		return "Resize to at least 32 x 12", 0
 	}
-	header := []string{m.paint(cyan, "EXCLUSIONS — optional"), tailFit(Safe(m.Root), w), m.exclusionStatus(), fit("Match names at every depth, including folder contents.", w)}
+	header := []string{m.paint(cyan, "EXCLUSIONS — GLOBAL"), tailFit(Safe(m.Root), w), m.exclusionStatus(), fit("Applies to every folder and disk; matches names at any depth.", w)}
 	input := "Add pattern: " + tailFit(Safe(m.Input), w-13)
 	header = append(header, m.rowStyle("37", m.MaskInput, fit(input, w)))
 	if m.maskCursor >= 0 && m.maskCursor < len(m.maskOptions) {

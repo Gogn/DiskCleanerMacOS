@@ -25,7 +25,7 @@ func maskDescription(mask string) string {
 			return suggestion.description
 		}
 	}
-	return "Custom pattern. Matches names at every depth in this root."
+	return "Custom pattern. Matches names at every depth in any scanned folder or disk."
 }
 
 func (m *Model) openMasks() {

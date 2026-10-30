@@ -94,6 +94,9 @@ func (m *Model) render() (string, int) {
 		if entry, ok := m.current(); ok {
 			body = append(body, Safe(entry.Path))
 		}
+		if m.Scanned && !m.LastScanAt.IsZero() {
+			body = append(body, m.scanStatus(true))
+		}
 		body = append(body, m.diagnostics()...)
 		footer = "↑/↓ or PgUp/PgDn scroll · Esc back"
 	case "scanning":
@@ -170,7 +173,7 @@ func (m *Model) render() (string, int) {
 		return "Resize", 0
 	}
 	footerLines := wrap(strings.Split(footer, "\n"), width)
-	available := height - len(footerLines) - 3
+	available := height - len(footerLines) - 1
 	if available < 1 {
 		return "Resize", 0
 	}
@@ -179,17 +182,28 @@ func (m *Model) render() (string, int) {
 		content = append(content, wrap([]string{Safe(m.Message)}, width)...)
 	}
 	content = append(content, wrap(body, width)...)
-	start := m.Offset
-	maxStart := max(0, len(content)-available)
-	start = min(max(0, start), maxStart)
+	scrollable := false
+	switch m.Screen {
+	case "details", "preview", "confirm", "results", "root":
+		scrollable = true
+	}
+	showIndicator := scrollable && len(content) > available
+	start, maxStart := 0, 0
+	if showIndicator {
+		available--
+		maxStart = len(content) - available
+		start = min(max(0, m.Offset), maxStart)
+	}
 	end := min(len(content), start+available)
 	result := []string{m.paint(cyan, "DISKCLEANER")}
 	result = append(result, content[start:end]...)
-	indicator := fmt.Sprintf("Lines %d–%d / %d", start+1, end, len(content))
-	if len([]rune(indicator)) > width {
-		indicator = "More: ↑/↓"
+	if showIndicator {
+		indicator := fmt.Sprintf("Lines %d–%d / %d", start+1, end, len(content))
+		if len([]rune(indicator)) > width {
+			indicator = "More: ↑/↓"
+		}
+		result = append(result, indicator)
 	}
-	result = append(result, indicator)
 	result = append(result, footerLines...)
 	return strings.Join(result, "\n"), maxStart
 }

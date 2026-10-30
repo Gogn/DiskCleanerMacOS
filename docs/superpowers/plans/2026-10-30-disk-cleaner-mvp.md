@@ -1,6 +1,8 @@
 # DiskCleaner для macOS — Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+**Актуальность документа:** это исторический план-снимок, а не описание нынешнего поведения. Архитектура, `Global Constraints`, чекбоксы и список файлов ниже сохраняют исходный замысел; некоторые пункты устарели. В частности, per-root исключения, сброс размеров при навигации и отсутствие кэша заменены глобальным списком и кэшем сканирований до выхода из приложения. Указанные в начальном плане пути `internal/ui/view.go` и `internal/ui/keys.go` — плановая карта файлов; текущая UI-реализация находится в `internal/ui/state/`. Не выполняйте старые незакрытые пункты без сверки с [README](../../../README.md) и [актуальной спецификацией](../specs/2026-10-30-disk-cleaner-design.md). Текущие проверки и незакрытые release gates — в [отчёте валидации](../../validation.md).
+
+> **Historical template note:** the following worker instructions and task checkboxes are preserved from the original plan; they are not authorization or a current implementation queue.
 
 **Goal:** Собрать распространяемую под GPL-3.0-only терминальную утилиту, которая показывает занятое место и удаляет только вручную выбранные объекты после подтверждения.
 

@@ -1,11 +1,13 @@
 package config
 
 import (
+	"bytes"
 	"diskcleaner/internal/ignore"
 	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 )
 
 type DeleteMode string
@@ -16,11 +18,12 @@ const (
 )
 
 type Settings struct {
-	Mode  DeleteMode          `json:"mode"`
-	Masks map[string][]string `json:"masks"`
+	Mode  DeleteMode `json:"mode"`
+	Masks []string   `json:"masks"`
 }
 
-func Default() Settings { return Settings{Mode: Trash, Masks: map[string][]string{}} }
+func Default() Settings { return Settings{Mode: Trash, Masks: []string{}} }
+
 func Path() (string, error) {
 	h, e := os.UserHomeDir()
 	if e != nil {
@@ -32,14 +35,9 @@ func validate(s Settings) error {
 	if s.Mode != Trash && s.Mode != Permanent {
 		return fmt.Errorf("invalid deletion mode %q", s.Mode)
 	}
-	for root, ms := range s.Masks {
-		if !filepath.IsAbs(root) || filepath.Clean(root) != root {
-			return fmt.Errorf("invalid root %q", root)
-		}
-		for _, m := range ms {
-			if e := ignore.Validate(m); e != nil {
-				return e
-			}
+	for _, m := range s.Masks {
+		if e := ignore.Validate(m); e != nil {
+			return e
 		}
 	}
 	return nil
@@ -52,21 +50,56 @@ func Load(p string) (Settings, error) {
 	if e != nil {
 		return Settings{}, e
 	}
-	var s Settings
-	if e = json.Unmarshal(b, &s); e != nil {
+	var stored struct {
+		Mode  DeleteMode      `json:"mode"`
+		Masks json.RawMessage `json:"masks"`
+	}
+	if e = json.Unmarshal(b, &stored); e != nil {
 		return Settings{}, fmt.Errorf("invalid settings: %w", e)
+	}
+	s := Settings{Mode: stored.Mode, Masks: []string{}}
+	raw := bytes.TrimSpace(stored.Masks)
+	if len(raw) > 0 && raw[0] == '{' {
+		var legacy map[string][]string
+		if e = json.Unmarshal(raw, &legacy); e != nil {
+			return Settings{}, fmt.Errorf("invalid settings: %w", e)
+		}
+		roots := make([]string, 0, len(legacy))
+		for root := range legacy {
+			if !filepath.IsAbs(root) || filepath.Clean(root) != root {
+				return Settings{}, fmt.Errorf("invalid root %q", root)
+			}
+			roots = append(roots, root)
+		}
+		sort.Strings(roots)
+		seen := map[string]bool{}
+		for _, root := range roots {
+			for _, mask := range legacy[root] {
+				if !seen[mask] {
+					s.Masks = append(s.Masks, mask)
+					seen[mask] = true
+				}
+			}
+		}
+	} else if len(raw) > 0 {
+		if e = json.Unmarshal(raw, &s.Masks); e != nil {
+			return Settings{}, fmt.Errorf("invalid settings: %w", e)
+		}
 	}
 	if e = validate(s); e != nil {
 		return Settings{}, e
 	}
 	if s.Masks == nil {
-		s.Masks = map[string][]string{}
+		s.Masks = []string{}
 	}
 	return s, nil
 }
 func Save(p string, s Settings) error {
 	if e := validate(s); e != nil {
 		return e
+	}
+	if s.Masks == nil {
+		s.Masks = []string{}
 	}
 	b, e := json.MarshalIndent(s, "", "  ")
 	if e != nil {

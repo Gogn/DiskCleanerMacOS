@@ -55,7 +55,7 @@ func run() error {
 	if e != nil {
 		return fmt.Errorf("load settings: %w", e)
 	}
-	g, e := policy.NewGuard(home, filepath.Dir(p), resolved, settings.Masks[resolved])
+	g, e := policy.NewGuard(home, filepath.Dir(p), resolved, settings.Masks)
 	if e != nil {
 		return fmt.Errorf("initialize protection: %w", e)
 	}

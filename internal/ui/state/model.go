@@ -34,6 +34,9 @@ type Model struct {
 	Guard                         *policy.Guard
 	Snapshot                      scan.Snapshot
 	Scanned                       bool
+	LastScanAt                    time.Time
+	scanCache                     map[string]cachedScan
+	navigationHistory             map[string]string
 	SortBySize                    bool
 	Selected                      map[string]cleanup.Target
 	Screen, Input, Message        string
@@ -62,16 +65,21 @@ type Model struct {
 
 func New(root string, settings config.Settings, g *policy.Guard, configPath string) *Model {
 	if settings.Masks == nil {
-		settings.Masks = map[string][]string{}
+		settings.Masks = []string{}
 	}
 	m := &Model{Settings: settings, ConfigPath: configPath, Guard: g, Screen: "list", Width: 100, Height: 30, Selected: map[string]cleanup.Target{}, Analyze: scan.AnalyzeWithProgress, Trash: cleanup.SystemTrash, Remove: cleanup.SystemRemove}
 	m.navigate(root)
 	return m
 }
-func (m *Model) Masks() []string { return m.Settings.Masks[m.Root] }
+func (m *Model) Masks() []string { return m.Settings.Masks }
 func (m *Model) invalidate() {
+	m.scanCache = nil
+	m.resetScan()
+}
+func (m *Model) resetScan() {
 	m.Snapshot = scan.Snapshot{}
 	m.Scanned = false
+	m.LastScanAt = time.Time{}
 	m.Selected = map[string]cleanup.Target{}
 	m.sortEntries()
 }
@@ -102,9 +110,13 @@ func (m *Model) navigate(p string) {
 		m.Message = e.Error()
 		return
 	}
-	if e = m.Guard.SetContext(root, m.Settings.Masks[root]); e != nil {
+	if e = m.Guard.SetContext(root, m.Settings.Masks); e != nil {
 		m.Message = e.Error()
 		return
+	}
+	previousRoot := m.Root
+	if previousRoot != root {
+		m.rememberLocation()
 	}
 	m.Root = root
 	m.Filter = ""
@@ -113,8 +125,9 @@ func (m *Model) navigate(p string) {
 	m.Offset = 0
 	m.Screen = "list"
 	m.Message = ""
-	m.invalidate()
-	m.Cursor = 0
+	m.resetScan()
+	m.restoreScan()
+	m.restoreLocation(previousRoot)
 }
 func (m *Model) targets() []cleanup.Target {
 	ts := make([]cleanup.Target, 0, len(m.Selected))
@@ -153,7 +166,7 @@ func (m *Model) toggleMask(mask string) {
 		m.Message = e.Error()
 		return
 	}
-	m.Settings.Masks[m.Root] = next
+	m.Settings.Masks = next
 	m.invalidate()
 	m.save()
 }
@@ -177,7 +190,8 @@ func (m *Model) Apply(e Event) {
 	switch e.Kind {
 	case "scan":
 		m.Screen = "list"
-		m.invalidate()
+		m.resetScan()
+		delete(m.scanCache, m.Root)
 		if e.Snapshot.Err != nil {
 			m.Message = "Scan failed or cancelled: " + e.Snapshot.Err.Error()
 		} else {
@@ -191,8 +205,10 @@ func (m *Model) Apply(e Event) {
 					break
 				}
 			}
-			m.Snapshot = e.Snapshot
+			m.Snapshot = copySnapshot(e.Snapshot)
 			m.Scanned = true
+			m.LastScanAt = time.Now()
+			m.rememberScan()
 			m.sortEntries()
 		}
 	case "preview":
@@ -352,6 +368,8 @@ func (m *Model) Key(k string) Job {
 	case "t":
 		m.SortBySize = !m.SortBySize
 		m.sortEntries()
+		m.Cursor = 0
+		m.normalizeCursor()
 	case "q":
 		m.Quit = true
 	case "v":
@@ -368,6 +386,19 @@ func (m *Model) Key(k string) Job {
 		m.moveCursor(-1)
 	case "down", "j":
 		m.moveCursor(1)
+	case "pgup":
+		m.moveCursor(-m.browserPageSize())
+	case "pgdown":
+		m.moveCursor(m.browserPageSize())
+	case "home", "end":
+		indices := m.visibleIndices()
+		if len(indices) > 0 {
+			if k == "home" {
+				m.Cursor = indices[0]
+			} else {
+				m.Cursor = indices[len(indices)-1]
+			}
+		}
 	case "left":
 		if m.Root != "/" {
 			m.navigate(filepath.Dir(m.Root))
@@ -380,16 +411,35 @@ func (m *Model) Key(k string) Job {
 		m.Screen = "root"
 		m.Input = m.Root
 	case "s":
+		m.Message = ""
 		m.Screen = "scan-confirm"
 	case "e":
 		m.openMasks()
+	case "E", "shift+e":
+		if e, ok := m.current(); ok {
+			mask := ignore.Literal(e.Name)
+			if !m.hasMask(mask) && ignore.Any(m.Masks(), e.Name) {
+				m.Message = "Excluded by a pattern. Press e to edit matching patterns."
+				break
+			}
+			m.toggleMask(mask)
+			if m.Message == "Settings saved." {
+				if m.hasMask(mask) {
+					m.Message = fmt.Sprintf("Excluded all items named %s globally, including matching folder contents. Settings saved.", Safe(e.Name))
+				} else if ignore.Any(m.Masks(), e.Name) {
+					m.Message = "Name exclusion removed globally and saved; still excluded by another pattern. Press e to edit patterns."
+				} else {
+					m.Message = fmt.Sprintf("Removed exclusion for %s globally. Settings saved.", Safe(e.Name))
+				}
+			}
+		}
 	case "o":
 		m.Screen = "settings"
 	case "x":
 		if e, ok := m.current(); ok && e.IsDir {
 			m.toggleMask(ignore.Literal(e.Name))
 			if !strings.Contains(m.Message, "not saved") {
-				m.Message = fmt.Sprintf("All items named %s within this root; matching directories include their contents. %s", Safe(e.Name), m.Message)
+				m.Message = fmt.Sprintf("All items named %s globally; matching directories include their contents. %s", Safe(e.Name), m.Message)
 			}
 		}
 	case "space", " ":

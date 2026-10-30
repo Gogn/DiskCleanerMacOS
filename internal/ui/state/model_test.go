@@ -62,7 +62,7 @@ func TestInitialViewDoesNotDeepScanAndWarns(t *testing.T) {
 		t.Fatal(m.View())
 	}
 }
-func TestChangeRootClearsSelectionsAndRequiresNewScan(t *testing.T) {
+func TestChangeRootClearsSelectionsAndRestoresPreviousScan(t *testing.T) {
 	m := fixture(t)
 	scanNow(t, m)
 	old := m.Root
@@ -71,8 +71,8 @@ func TestChangeRootClearsSelectionsAndRequiresNewScan(t *testing.T) {
 		t.Fatal("navigation did not reset")
 	}
 	m.Key("left")
-	if m.Root != old || m.Scanned {
-		t.Fatal("restored scan")
+	if m.Root != old || !m.Scanned {
+		t.Fatal("previous scan was not restored")
 	}
 	m.Key("r")
 	m.Input = "/no/such/root"
@@ -97,7 +97,7 @@ func TestManualSelectionAndExclusion(t *testing.T) {
 		t.Fatal("mask did not invalidate")
 	}
 	saved, e := config.Load(m.ConfigPath)
-	if e != nil || len(saved.Masks[m.Root]) != 1 {
+	if e != nil || len(saved.Masks) != 1 {
 		t.Fatal(saved, e)
 	}
 }
@@ -142,6 +142,8 @@ func TestSelectionCapturedBeforeConfirmation(t *testing.T) {
 }
 func TestSizeLabelsFollowDeleteMode(t *testing.T) {
 	m := fixture(t)
+	scanNow(t, m)
+	m.Key("space")
 	for _, mode := range []config.DeleteMode{config.Trash, config.Permanent} {
 		m.Settings.Mode = mode
 		label := "Selected size"
@@ -277,7 +279,7 @@ func TestSuggestedExclusionsPersistAndInvalidateScan(t *testing.T) {
 		t.Fatal("suggestions did not apply through normal exclusion handling")
 	}
 	saved, err := config.Load(m.ConfigPath)
-	if err != nil || strings.Join(saved.Masks[m.Root], ",") != "node_modules,CloudStorage" {
+	if err != nil || strings.Join(saved.Masks, ",") != "node_modules,CloudStorage" {
 		t.Fatal("suggestions not saved", saved, err)
 	}
 	m.Key("enter")
@@ -289,8 +291,8 @@ func TestSuggestedExclusionsPersistAndInvalidateScan(t *testing.T) {
 		t.Fatal("exclusions should return to the browser")
 	}
 	m.Key("right")
-	if len(m.Masks()) != 0 {
-		t.Fatal("suggestions leaked into another folder")
+	if len(m.Masks()) != 1 || !m.hasMask("node_modules") {
+		t.Fatal("navigation lost global exclusions")
 	}
 }
 
@@ -360,7 +362,7 @@ func TestUnknownEstimateHasNoNumericZero(t *testing.T) {
 func TestMaskListCanScroll(t *testing.T) {
 	m := fixture(t)
 	for i := 0; i < 50; i++ {
-		m.Settings.Masks[m.Root] = append(m.Settings.Masks[m.Root], fmt.Sprintf("cache-%02d", i))
+		m.Settings.Masks = append(m.Settings.Masks, fmt.Sprintf("cache-%02d", i))
 	}
 	m.Key("e")
 	first := m.View()
@@ -440,7 +442,7 @@ func TestListKeepsHeaderAndCurrentEntryVisible(t *testing.T) {
 	m.Width, m.Height, m.Cursor = 40, 24, 16
 	m.Key("space")
 	view := m.View()
-	if !strings.Contains(view, "v info") || !strings.Contains(view, "Sort:") || !strings.Contains(view, "Selected size") {
+	if !strings.Contains(view, "v info") || !strings.Contains(view, "Sort:") || !strings.Contains(view, "Start a scan before selecting items.") {
 		t.Fatal("fixed status or details hint missing", view)
 	}
 	entry, _ := m.current()
