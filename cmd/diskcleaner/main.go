@@ -12,6 +12,8 @@ import (
 	"runtime"
 )
 
+var buildVersion = "0.1.0-dev"
+
 func main() {
 	if e := run(); e != nil {
 		fmt.Fprintf(os.Stderr, "DiskCleaner: %q\n", e.Error())
@@ -23,7 +25,7 @@ func run() error {
 	version := flag.Bool("version", false, "print version")
 	flag.Parse()
 	if *version {
-		fmt.Println("DiskCleaner 0.1.0-dev")
+		fmt.Println("DiskCleaner " + buildVersion)
 		return nil
 	}
 	if runtime.GOOS != "darwin" {

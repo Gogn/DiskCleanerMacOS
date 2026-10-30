@@ -14,9 +14,31 @@ AI explanations can help identify a highlighted file or folder and assess deleti
 
 ![DiskCleaner AI explanation showing allocated and logical sizes and a deletion-risk assessment](docs/images/ai-explanation.png)
 
+## Download v0.1.0-beta.1 prerelease
+
+[Download the v0.1.0-beta.1 prerelease from GitHub](https://github.com/Gogn/DiskCleanerMacOS/releases/tag/v0.1.0-beta.1).
+
+- `diskcleaner_v0.1.0-beta.1_darwin_arm64.tar.gz` — Apple Silicon (M-series)
+- `diskcleaner_v0.1.0-beta.1_darwin_amd64.tar.gz` — Intel Mac
+- `SHA256SUMS` — archive checksums
+
+Download the archive for your Mac and `SHA256SUMS`. Run `shasum -a 256` on the archive and compare its hash with the matching line in `SHA256SUMS`, then extract it in Terminal:
+
+```sh
+shasum -a 256 diskcleaner_v0.1.0-beta.1_darwin_arm64.tar.gz
+tar -xzf diskcleaner_v0.1.0-beta.1_darwin_arm64.tar.gz
+./diskcleaner
+```
+
+Use the `amd64` filename in the commands on Intel. Each archive contains `diskcleaner`, `LICENSE`, and `THIRD_PARTY_NOTICES.txt`; Go is not required. This is a prerelease: only macOS 27.0.1 on Apple Silicon has been run. macOS 26 and native Intel runtime behavior are unverified; the Intel binary's `-version` output was checked under Rosetta only. Successful real Trash movement also remains unverified.
+
+Neither binary is Developer ID-signed or notarized (Apple Silicon is ad-hoc-signed; Intel is unsigned), so macOS may show a security warning. Verify the official checksum before opening. If you still choose to proceed, use Apple's standard [Open Anyway flow](https://support.apple.com/en-us/102445) for this download; do not disable Gatekeeper globally.
+
 ## Build and run
 
 Requires Go 1.26 or newer.
+
+Maintainers: see [release archive instructions](docs/releasing.md) to build prerelease archives.
 
 ```sh
 go mod download
