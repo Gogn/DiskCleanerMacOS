@@ -4,7 +4,7 @@
 
 - DiskCleaner is a Go terminal app for macOS. The module minimum is Go 1.26.
 - Main areas: `cmd/diskcleaner` starts the app; `internal/config` stores settings; `internal/scan` lists and measures entries; `internal/ignore` handles name patterns; `internal/policy` guards protected paths and identities; `internal/cleanup` previews and executes cleanup; `internal/ui/state` owns UI behavior; `internal/ui/model.go` adapts Bubble Tea messages; `internal/explain` builds metadata and invokes Codex.
-- Current behavior and user-facing instructions are in `README.md`; the [design specification](docs/superpowers/specs/2026-10-30-disk-cleaner-design.md) is the detailed behavior reference; `docs/validation.md` records current evidence and release gates; `docs/releasing.md` describes packaging.
+- Start with `README.md` and the [documentation index](docs/README.md); detailed user-facing instructions are in [the user guide](docs/usage.md). The [design specification](docs/design.md) is the detailed behavior reference; `docs/validation.md` records current evidence and release gates; `docs/releasing.md` describes packaging.
 - Read the relevant package code and tests before changing behavior. Prefer focused changes and keep UI state, filesystem operations, and terminal-adapter behavior in their existing packages.
 - Before non-trivial work, consult available project-specific memory and relevant linked notes, if present. Treat memory as context, not authority; verify pending work and time-sensitive claims against the repository. Never copy secrets into memory.
 

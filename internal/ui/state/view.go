@@ -5,6 +5,7 @@ import (
 	"diskcleaner/internal/config"
 	"diskcleaner/internal/scan"
 	"fmt"
+	"github.com/charmbracelet/x/ansi"
 	"strconv"
 	"strings"
 )
@@ -207,6 +208,9 @@ func (m *Model) render() (string, int) {
 	showIndicator := scrollable && len(content) > available
 	start, maxStart := 0, 0
 	if showIndicator {
+		if available < 2 {
+			return "Resize", 0
+		}
 		available--
 		maxStart = len(content) - available
 		start = min(max(0, m.Offset), maxStart)
@@ -225,8 +229,8 @@ func (m *Model) render() (string, int) {
 	return strings.Join(result, "\n"), maxStart
 }
 
-// Conservative cell accounting keeps wide Unicode names inside the viewport.
-// Names remain exact in stored paths; wrapping affects display only.
+// Wrap terminal cells without splitting graphemes. Reapply whole-line styles
+// per physical row so scrolling cannot lose the opening color or leak it.
 func wrap(lines []string, width int) []string {
 	out := []string{}
 	for _, line := range lines {
@@ -238,22 +242,9 @@ func wrap(lines []string, width int) []string {
 				line = strings.TrimSuffix(rest, reset)
 			}
 		}
-		var b strings.Builder
-		cells := 0
-		for _, r := range line {
-			n := 1
-			if r > 127 {
-				n = 2
-			}
-			if cells+n > width {
-				out = append(out, style+b.String()+endStyle)
-				b.Reset()
-				cells = 0
-			}
-			b.WriteRune(r)
-			cells += n
+		for _, row := range strings.Split(ansi.Hardwrap(line, width, true), "\n") {
+			out = append(out, style+row+endStyle)
 		}
-		out = append(out, style+b.String()+endStyle)
 	}
 	return out
 }

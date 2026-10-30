@@ -20,13 +20,14 @@ import (
 
 type Job func() Event
 type Event struct {
-	Kind        string
-	Snapshot    scan.Snapshot
-	Preview     cleanup.Preview
-	Results     []cleanup.Result
-	Err         error
-	Explanation string
-	ExplainID   uint64
+	Kind         string
+	Snapshot     scan.Snapshot
+	Preview      cleanup.Preview
+	Results      []cleanup.Result
+	Err          error
+	Explanation  string
+	ExplainID    uint64
+	scanObserved *scanObservation
 }
 type Model struct {
 	Root                          string
@@ -58,6 +59,7 @@ type Model struct {
 	startedAt                     time.Time
 	progress                      *progressMailbox
 	cancel                        context.CancelFunc
+	cancelRequested               bool
 	Preview                       cleanup.Preview
 	Results                       []cleanup.Result
 	Confirmed                     []cleanup.Target
@@ -214,6 +216,7 @@ func (m *Model) toggleMask(mask string) {
 func (m *Model) start(kind string, work func(context.Context) Event) Job {
 	ctx, c := context.WithCancel(context.Background())
 	m.cancel = c
+	m.cancelRequested = false
 	m.Busy = true
 	m.Screen = kind
 	m.Message = ""
@@ -229,8 +232,11 @@ func (m *Model) Apply(e Event) {
 		m.cancel = nil
 	}
 	m.Busy = false
+	cancelRequested := m.cancelRequested
+	m.cancelRequested = false
 	m.progress = nil
 	m.Offset = 0
+	m.Message = ""
 	switch e.Kind {
 	case "explain":
 		m.applyExplanation(e)
@@ -238,6 +244,15 @@ func (m *Model) Apply(e Event) {
 		m.Screen = "list"
 		m.resetScan()
 		delete(m.scanCache, m.Root)
+		if cancelRequested && e.Snapshot.Err == nil {
+			e.Snapshot.Err = context.Canceled
+		}
+		observed := e.scanObserved
+		if e.Snapshot.Err == nil && observed != nil {
+			validated, validObserved, err := observed.validate(m.Root, e.Snapshot)
+			e.Snapshot, observed = validated, validObserved
+			e.Snapshot.Err = err
+		}
 		if e.Snapshot.Err != nil {
 			m.Message = "Scan failed or cancelled: " + e.Snapshot.Err.Error()
 		} else {
@@ -254,10 +269,13 @@ func (m *Model) Apply(e Event) {
 			m.Snapshot = copySnapshot(e.Snapshot)
 			m.Scanned = true
 			m.LastScanAt = time.Now()
-			m.rememberScan()
+			m.rememberScan(observed)
 			m.sortEntries()
 		}
 	case "preview":
+		if cancelRequested && e.Err == nil {
+			e.Err = context.Canceled
+		}
 		if e.Err != nil {
 			m.Screen = "list"
 			m.Message = "Preview failed or cancelled: " + e.Err.Error()
@@ -282,6 +300,7 @@ func (m *Model) Apply(e Event) {
 func (m *Model) Key(k string) Job {
 	if m.Busy {
 		if k == "esc" || k == "ctrl+c" {
+			m.cancelRequested = true
 			if m.Screen == "ai-working" {
 				m.explanation.cancelled = true
 			}
@@ -395,7 +414,11 @@ func (m *Model) Key(k string) Job {
 			m.progress, m.Progress, m.Elapsed = mailbox, scan.Progress{}, 0
 			m.startedAt = time.Now()
 			return m.start("scanning", func(ctx context.Context) Event {
-				return Event{Kind: "scan", Snapshot: analyze(ctx, root, masks, mailbox.publish)}
+				observed, err := captureScanObservation(ctx, root)
+				if err != nil {
+					return Event{Kind: "scan", Snapshot: scan.Snapshot{Err: err}}
+				}
+				return Event{Kind: "scan", Snapshot: analyze(ctx, root, masks, mailbox.publish), scanObserved: observed}
 			})
 		}
 		return nil

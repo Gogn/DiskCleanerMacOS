@@ -23,16 +23,13 @@ func copySnapshot(s scan.Snapshot) scan.Snapshot {
 	return copy
 }
 
-func (m *Model) rememberScan() {
-	root, err := os.Stat(m.Root)
-	if err != nil {
+func (m *Model) rememberScan(observed *scanObservation) {
+	if observed == nil || observed.root == nil {
 		return
 	}
-	cached := cachedScan{snapshot: copySnapshot(m.Snapshot), root: root, entries: map[string]os.FileInfo{}, scannedAt: m.LastScanAt}
-	for _, entry := range m.Snapshot.Listing {
-		if info, err := os.Lstat(entry.Path); err == nil {
-			cached.entries[entry.Path] = info
-		}
+	cached := cachedScan{snapshot: copySnapshot(m.Snapshot), root: observed.root, entries: map[string]os.FileInfo{}, scannedAt: m.LastScanAt}
+	for path, info := range observed.entries {
+		cached.entries[path] = info
 	}
 	if m.scanCache == nil {
 		m.scanCache = map[string]cachedScan{}
@@ -61,8 +58,7 @@ func (m *Model) restoreScan() {
 		before := cached.entries[entry.Path]
 		now, err := os.Lstat(entry.Path)
 		measurement, measured := cached.snapshot.Entries[entry.Path]
-		if exists && measured && before != nil && err == nil && old.IsDir == entry.IsDir && old.IsSymlink == entry.IsSymlink &&
-			os.SameFile(before, now) && before.Mode().Type() == now.Mode().Type() && before.Size() == now.Size() && before.ModTime().Equal(now.ModTime()) {
+		if exists && measured && err == nil && old.IsDir == entry.IsDir && old.IsSymlink == entry.IsSymlink && sameScanEntry(before, now) {
 			snapshot.Entries[entry.Path] = measurement
 			infos[entry.Path] = before
 		} else {

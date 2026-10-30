@@ -1,6 +1,7 @@
 package state
 
 import (
+	"context"
 	"diskcleaner/internal/scan"
 	"os"
 	"path/filepath"
@@ -21,17 +22,24 @@ func entryNames(m *Model) string {
 func TestSortTogglePreservesTargetsAndSnapshot(t *testing.T) {
 	m := fixture(t)
 	listing := append([]scan.Entry(nil), m.Entries...)
+	observed, err := captureScanObservation(context.Background(), m.Root)
+	if err != nil {
+		t.Fatal(err)
+	}
 	m.Apply(Event{Kind: "scan", Snapshot: scan.Snapshot{
 		Listing: listing,
 		Entries: map[string]scan.Measurement{
 			listing[0].Path: {Bytes: 10, State: scan.Complete},
 			listing[1].Path: {Bytes: 100, State: scan.Complete},
 		},
-	}})
+	}, scanObserved: observed})
 	m.Key("space")
 	target := m.Selected[listing[0].Path]
 	snapshot := copySnapshot(m.Snapshot)
 	lastScanAt := m.LastScanAt
+	if _, ok := m.scanCache[m.Root]; !ok {
+		t.Fatal("observed snapshot did not populate the session cache")
+	}
 	cache := make(map[string]cachedScan, len(m.scanCache))
 	for root, cached := range m.scanCache {
 		cached.snapshot = copySnapshot(cached.snapshot)

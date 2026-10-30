@@ -87,5 +87,8 @@ func analyzeWith(ctx context.Context, root string, masks []string, measureFn fun
 		}
 		report(Progress{Completed: index + 1, Total: len(es)})
 	}
+	if e = ctx.Err(); e != nil {
+		return fail(e)
+	}
 	return s
 }

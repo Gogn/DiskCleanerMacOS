@@ -1,9 +1,11 @@
 package cleanup
 
 import (
+	"bytes"
 	"context"
 	"diskcleaner/internal/config"
 	"diskcleaner/internal/policy"
+	"errors"
 	"fmt"
 	"os/exec"
 	"strings"
@@ -35,13 +37,49 @@ type Result struct {
 }
 type Runner func(context.Context, string) error
 
+// ErrNotStarted marks a runner error returned before the system command began,
+// so no change can have occurred and the item is reported as skipped.
+var ErrNotStarted = errors.New("cleanup command was not started")
+
+const maxCommandOutput = 4096
+
+// commandOutput keeps only the beginning of command output, so a tree with many
+// errors cannot grow the per-item report without bound.
+type commandOutput struct {
+	buf       bytes.Buffer
+	truncated bool
+}
+
+func (o *commandOutput) Write(p []byte) (int, error) {
+	if room := maxCommandOutput - o.buf.Len(); len(p) > room {
+		o.buf.Write(p[:max(room, 0)])
+		o.truncated = true
+	} else {
+		o.buf.Write(p)
+	}
+	return len(p), nil
+}
+
+func (o *commandOutput) String() string {
+	text := strings.TrimSpace(strings.ToValidUTF8(o.buf.String(), ""))
+	if o.truncated {
+		text += " [output truncated]"
+	}
+	return text
+}
+
 func run(ctx context.Context, command string, args ...string) error {
 	if e := ctx.Err(); e != nil {
-		return e
+		return fmt.Errorf("%w: %w", ErrNotStarted, e)
 	}
-	out, e := exec.CommandContext(ctx, command, args...).CombinedOutput()
-	if e != nil {
-		return fmt.Errorf("%s: %w: %s", command, e, strings.TrimSpace(string(out)))
+	out := &commandOutput{}
+	cmd := exec.CommandContext(ctx, command, args...)
+	cmd.Stdout, cmd.Stderr = out, out
+	if e := cmd.Start(); e != nil {
+		return fmt.Errorf("%w: %s: %w", ErrNotStarted, command, e)
+	}
+	if e := cmd.Wait(); e != nil {
+		return fmt.Errorf("%s: %w: %s", command, e, out)
 	}
 	return nil
 }
@@ -83,7 +121,10 @@ func Execute(ctx context.Context, mode config.DeleteMode, selected []Target, gua
 		}
 		e = runner(ctx, t.Path)
 		r.Outcome = Completed
-		if e != nil {
+		if errors.Is(e, ErrNotStarted) {
+			r.Outcome = Skipped
+			r.Err = e
+		} else if e != nil {
 			r.Outcome = Failed
 			r.Err = e
 		}

@@ -8,6 +8,7 @@ import (
 	"errors"
 	"os"
 	"os/exec"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -19,6 +20,23 @@ const (
 )
 
 var errOutputLimit = errors.New("Codex output exceeded the explanation limit; try a smaller item")
+
+// errTimeout keeps errors.Is(err, context.DeadlineExceeded) while replacing
+// the raw context text with an actionable message.
+var errTimeout = timeoutError{}
+
+type timeoutError struct{}
+
+func (timeoutError) Error() string {
+	return "Codex did not finish the explanation within the time limit; retry later"
+}
+func (timeoutError) Unwrap() error { return context.DeadlineExceeded }
+
+// HTTP status codes are matched as whole numbers, not inside durations or IDs.
+var (
+	unauthorizedStatus = regexp.MustCompile(`\b401\b`)
+	rateLimitStatus    = regexp.MustCompile(`\b429\b`)
+)
 
 func cliArgs() []string {
 	args := []string{"--no-daemon", "--ask-for-approval", "never", "--sandbox", "read-only", "--strict-config"}
@@ -54,14 +72,24 @@ func runCLI(ctx context.Context, binary string, prompt []byte, timeout time.Dura
 		return "", err
 	}
 	stdout := &limitedBuffer{limit: outputLimit, cancel: cancel}
-	stderr := &limitedBuffer{limit: 64 * 1024, cancel: cancel}
+	// Stderr is only used to classify failures, so verbose logs are truncated
+	// instead of cancelling an otherwise valid answer.
+	stderr := &limitedBuffer{limit: 64 * 1024}
 	cmd.Stdout, cmd.Stderr = stdout, stderr
 	err = cmd.Run()
 	// A CLI may exit before a background child. Do not leave its process group
 	// running merely because the group leader has already completed.
 	cleanupProcess(cmd)
 	if cause := context.Cause(ctx); cause != nil {
+		if errors.Is(cause, context.DeadlineExceeded) {
+			return "", errTimeout
+		}
 		return "", cause
+	}
+	// A background child holding stdout open after a successful exit only
+	// delays pipe closing; the CLI's own completed output is still usable.
+	if errors.Is(err, exec.ErrWaitDelay) && cmd.ProcessState != nil && cmd.ProcessState.Success() {
+		err = nil
 	}
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
@@ -76,8 +104,9 @@ func runCLI(ctx context.Context, binary string, prompt []byte, timeout time.Dura
 	return answer, nil
 }
 
-// limitedBuffer drains without retaining unbounded output and cancels the
-// process as soon as its stream exceeds the limit. Raw CLI logs are never shown.
+// limitedBuffer drains without retaining unbounded output. With cancel set, it
+// stops the process as soon as its stream exceeds the limit. Raw CLI logs are
+// never shown.
 type limitedBuffer struct {
 	mu     sync.Mutex
 	buf    bytes.Buffer
@@ -92,7 +121,9 @@ func (b *limitedBuffer) Write(p []byte) (int, error) {
 	remaining := b.limit - b.buf.Len()
 	if n > remaining {
 		b.buf.Write(p[:remaining])
-		b.cancel(errOutputLimit)
+		if b.cancel != nil {
+			b.cancel(errOutputLimit)
+		}
 	} else {
 		b.buf.Write(p)
 	}
@@ -164,9 +195,9 @@ func errorMessages(output []byte) string {
 func cliFailure(log string) error {
 	log = strings.ToLower(log)
 	switch {
-	case strings.Contains(log, "unauthorized"), strings.Contains(log, "401"), strings.Contains(log, "not logged in"), strings.Contains(log, "sign in"), strings.Contains(log, "authentication"), strings.Contains(log, "refresh token"):
+	case strings.Contains(log, "unauthorized"), unauthorizedStatus.MatchString(log), strings.Contains(log, "not logged in"), strings.Contains(log, "sign in"), strings.Contains(log, "authentication"), strings.Contains(log, "refresh token"):
 		return errors.New("Codex sign-in is required or expired; sign in to Codex and retry")
-	case strings.Contains(log, "quota"), strings.Contains(log, "rate limit"), strings.Contains(log, "usage limit"), strings.Contains(log, "429"):
+	case strings.Contains(log, "quota"), strings.Contains(log, "rate limit"), strings.Contains(log, "usage limit"), rateLimitStatus.MatchString(log):
 		return errors.New("Codex usage limit reached; check your account or try again later")
 	case strings.Contains(log, "unexpected argument"), strings.Contains(log, "unknown field"), strings.Contains(log, "unknown feature"):
 		return errors.New("this Codex CLI version is incompatible; update Codex and retry")

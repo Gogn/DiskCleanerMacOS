@@ -6,8 +6,10 @@ import (
 	"diskcleaner/internal/policy"
 	"diskcleaner/internal/scan"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -165,5 +167,30 @@ func TestUnicodeExclusionsAgreeWithCleanupInCLocale(t *testing.T) {
 				t.Fatalf("scan and cleanup disagree: called=%v result=%+v", called, results[0])
 			}
 		})
+	}
+}
+func TestRunnerNotStartedIsReportedAsSkipped(t *testing.T) {
+	_, g, target := setup(t)
+	// Cancellation can land after Execute's last check but before the runner
+	// starts its command; nothing ran, so the item must not claim changes.
+	out := Execute(context.Background(), config.Trash, []Target{target}, g, func(context.Context, string) error {
+		return fmt.Errorf("%w: %w", ErrNotStarted, context.Canceled)
+	}, nil)
+	if out[0].Outcome != Skipped || !errors.Is(out[0].Err, context.Canceled) {
+		t.Fatal(out)
+	}
+	ctx, c := context.WithCancel(context.Background())
+	c()
+	if e := SystemTrash(ctx, target.Path); !errors.Is(e, ErrNotStarted) {
+		t.Fatal("cancelled runner did not report that its command never started", e)
+	}
+	if e := run(context.Background(), filepath.Join(t.TempDir(), "missing")); !errors.Is(e, ErrNotStarted) {
+		t.Fatal("missing executable was not reported as not started", e)
+	}
+}
+func TestRunBoundsReportedCommandOutput(t *testing.T) {
+	e := run(context.Background(), "/bin/sh", "-c", "i=0; while [ $i -lt 2000 ]; do echo 'rm: permission denied' >&2; i=$((i+1)); done; exit 1")
+	if e == nil || errors.Is(e, ErrNotStarted) || len(e.Error()) > maxCommandOutput+200 || !strings.Contains(e.Error(), "[output truncated]") {
+		t.Fatalf("command output was not bounded: %d bytes", len(fmt.Sprint(e)))
 	}
 }

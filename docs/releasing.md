@@ -1,11 +1,23 @@
 # Building prerelease archives
 
-From a clean, committed checkout, run the release builder with the intended tag:
+Choose a **new, unpublished tag** and build from its clean, committed checkout. The placeholder below must be replaced with the intended version:
 
 ```sh
-./scripts/build-release.sh v0.1.0-beta.1
+release_tag="vX.Y.Z-beta.N"
+./scripts/build-release.sh "$release_tag"
 ```
 
-The script creates `dist/v0.1.0-beta.1/` with Apple Silicon (`darwin_arm64`) and Intel (`darwin_amd64`) tarballs plus `SHA256SUMS`. Each archive contains `diskcleaner`, `LICENSE`, and `THIRD_PARTY_NOTICES.txt`; the executable's `-version` value is set from the tag. Verify the archive contents and checksums before attaching them to the matching GitHub release. Rebuild from the final committed source; do not publish trial artifacts made from a working tree.
+The script creates `dist/<tag>/` with `diskcleaner_<tag>_darwin_arm64.tar.gz`, `diskcleaner_<tag>_darwin_amd64.tar.gz` and `SHA256SUMS`. Each archive contains `diskcleaner`, `LICENSE` and `THIRD_PARTY_NOTICES.txt`. The executable's `-version` value is set from the tag without its leading `v`. Builds use `CGO_ENABLED=0` and `-trimpath` for both macOS architectures.
 
-These prerelease binaries are not Developer ID-signed or notarized. The Apple Silicon build is ad-hoc-signed; the Intel build is unsigned. See [README](../README.md) for download, checksum, and macOS security-prompt guidance.
+Before publishing:
+
+1. Verify both archives' member lists, executable permissions and target architectures.
+2. Check the native binary's `-version` output and its embedded source revision. Cross-compilation alone is not native runtime verification.
+3. From the artifact directory, run `shasum -a 256 -c SHA256SUMS`.
+4. Attach the verified archives and checksums to the matching **new** GitHub tag/release, with a source link and accurate validation/signing notes.
+
+Rebuild from the final committed source before uploading; do not publish trial artifacts from a working tree. The script replaces local files in its output directory when rerun. This is not permission to overwrite assets on an already published tag: use a new version for changed source or artifacts.
+
+[`v0.1.0-beta.1`](https://github.com/Gogn/DiskCleanerMacOS/releases/tag/v0.1.0-beta.1) has already been published. Its recorded signing status and source revision are in [validation status](validation.md#published-prerelease-and-current-source). Later source audit fixes are not in those archives. Future release notes must state the evidence for their own build, not reuse beta.1 verification as proof.
+
+The build script does not perform Developer ID signing or notarization. See the [README](../README.md) for download, checksum and standard macOS security-prompt guidance. Review the [remaining release gates](validation.md#remaining-release-gates) before claiming platform support or stable-release certification. Documentation entry points are in the [index](README.md).

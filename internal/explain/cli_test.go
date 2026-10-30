@@ -87,6 +87,8 @@ func TestCLIErrorClassificationDoesNotExposeLogs(t *testing.T) {
 	for _, tt := range []struct{ log, want string }{
 		{"401 unauthorized SECRET_TOKEN", "sign-in"},
 		{"rate limit SECRET_TOKEN", "usage limit"},
+		{"HTTP 429 SECRET_TOKEN", "usage limit"},
+		{"request failed after 401ms SECRET_TOKEN", "could not finish"},
 		{"unexpected argument '--no-daemon' SECRET_TOKEN", "incompatible"},
 		{"some failure SECRET_TOKEN", "could not finish"},
 	} {
@@ -138,6 +140,34 @@ func TestCLIOutputLimitAndTimeout(t *testing.T) {
 	_, err = runCLI(context.Background(), binary, []byte(`{}`), 50*time.Millisecond, maxOutputBytes)
 	if !errors.Is(err, context.DeadlineExceeded) || time.Since(start) > 3*time.Second {
 		t.Fatalf("timeout: %v after %v", err, time.Since(start))
+	}
+	if strings.Contains(err.Error(), "context deadline exceeded") || !strings.Contains(err.Error(), "time limit") {
+		t.Fatalf("timeout was not classified: %v", err)
+	}
+}
+
+func TestCLIVerboseStderrDoesNotDiscardAnswer(t *testing.T) {
+	binary := fakeCLI(t, `cat >/dev/null
+i=0
+while [ $i -lt 3000 ]; do printf 'debug log line with SECRET_TOKEN padding\n' >&2; i=$((i+1)); done
+cat <<'EVENTS'
+`+successfulEvents+`EVENTS`)
+	answer, err := runCLI(context.Background(), binary, []byte(`{}`), 5*time.Second, maxOutputBytes)
+	if err != nil || answer != "This is a test folder." {
+		t.Fatalf("verbose stderr cancelled a valid answer: %q, %v", answer, err)
+	}
+}
+
+func TestCLIAnswerSurvivesBackgroundChildHoldingStdout(t *testing.T) {
+	// The child inherits stdout and outlives the CLI, so Wait reports
+	// ErrWaitDelay even though the CLI itself completed successfully.
+	binary := fakeCLI(t, `(sleep 5) &
+cat >/dev/null
+cat <<'EVENTS'
+`+successfulEvents+`EVENTS`)
+	answer, err := runCLI(context.Background(), binary, []byte(`{}`), 10*time.Second, maxOutputBytes)
+	if err != nil || answer != "This is a test folder." {
+		t.Fatalf("open inherited stdout discarded a valid answer: %q, %v", answer, err)
 	}
 }
 
