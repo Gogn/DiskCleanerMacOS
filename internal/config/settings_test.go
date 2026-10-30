@@ -12,10 +12,11 @@ import (
 func TestDefaultsAndRoundTrip(t *testing.T) {
 	p := filepath.Join(t.TempDir(), "settings", "config.json")
 	s, e := Load(p)
-	if e != nil || s.Mode != Trash || len(s.Masks) != 0 {
+	if e != nil || s.Mode != Trash || len(s.Masks) != 0 || s.ExplainLanguage != "en" {
 		t.Fatal(s, e)
 	}
 	s.Mode = Permanent
+	s.ExplainLanguage = "ru"
 	s.Masks = []string{"cache", "*.tmp"}
 	if e = Save(p, s); e != nil {
 		t.Fatal(e)
@@ -32,6 +33,49 @@ func TestDefaultsAndRoundTrip(t *testing.T) {
 		os.WriteFile(p, []byte(v), 0600)
 		if _, e = Load(p); e == nil {
 			t.Fatal("accepted", v)
+		}
+	}
+}
+
+func TestAnswerLanguageDefaultsAndLegacySettings(t *testing.T) {
+	for _, raw := range []string{
+		`{"mode":"trash","masks":[]}`,
+		`{"mode":"trash","masks":{"/one":["cache"]}}`,
+		`{"mode":"trash","masks":[],"explain_language":""}`,
+	} {
+		p := filepath.Join(t.TempDir(), "config.json")
+		if err := os.WriteFile(p, []byte(raw), 0600); err != nil {
+			t.Fatal(err)
+		}
+		s, err := Load(p)
+		if err != nil || s.ExplainLanguage != "en" {
+			t.Fatal("older or empty answer language did not default to English", s, err)
+		}
+	}
+	p := filepath.Join(t.TempDir(), "config.json")
+	if err := Save(p, Settings{Mode: Trash}); err != nil {
+		t.Fatal(err)
+	}
+	s, err := Load(p)
+	if err != nil || s.ExplainLanguage != "en" {
+		t.Fatal("saving manually constructed settings lost English default", s, err)
+	}
+}
+
+func TestUnsupportedAnswerLanguageIsRejected(t *testing.T) {
+	for _, language := range []string{"fr", "EN", "Russian"} {
+		p := filepath.Join(t.TempDir(), "config.json")
+		raw := `{"mode":"trash","masks":[],"explain_language":"` + language + `"}`
+		if err := os.WriteFile(p, []byte(raw), 0600); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := Load(p); err == nil {
+			t.Fatal("invalid persisted answer language accepted", language)
+		}
+		s := Default()
+		s.ExplainLanguage = language
+		if err := Save(p, s); err == nil {
+			t.Fatal("invalid answer language saved", language)
 		}
 	}
 }

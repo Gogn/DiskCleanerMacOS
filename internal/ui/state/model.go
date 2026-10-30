@@ -5,6 +5,7 @@ import (
 	"context"
 	"diskcleaner/internal/cleanup"
 	"diskcleaner/internal/config"
+	"diskcleaner/internal/explain"
 	"diskcleaner/internal/ignore"
 	"diskcleaner/internal/policy"
 	"diskcleaner/internal/scan"
@@ -19,11 +20,13 @@ import (
 
 type Job func() Event
 type Event struct {
-	Kind     string
-	Snapshot scan.Snapshot
-	Preview  cleanup.Preview
-	Results  []cleanup.Result
-	Err      error
+	Kind        string
+	Snapshot    scan.Snapshot
+	Preview     cleanup.Preview
+	Results     []cleanup.Result
+	Err         error
+	Explanation string
+	ExplainID   uint64
 }
 type Model struct {
 	Root                          string
@@ -61,6 +64,8 @@ type Model struct {
 	ConfirmedMode                 config.DeleteMode
 	Analyze                       func(context.Context, string, []string, func(scan.Progress)) scan.Snapshot
 	Trash, Remove                 cleanup.Runner
+	Explain                       func(context.Context, explain.Request) (string, error)
+	explanation                   explanationState
 }
 
 func New(root string, settings config.Settings, g *policy.Guard, configPath string) *Model {
@@ -68,6 +73,7 @@ func New(root string, settings config.Settings, g *policy.Guard, configPath stri
 		settings.Masks = []string{}
 	}
 	m := &Model{Settings: settings, ConfigPath: configPath, Guard: g, Screen: "list", Width: 100, Height: 30, Selected: map[string]cleanup.Target{}, Analyze: scan.AnalyzeWithProgress, Trash: cleanup.SystemTrash, Remove: cleanup.SystemRemove}
+	m.Explain = explain.Run
 	m.navigate(root)
 	return m
 }
@@ -129,6 +135,41 @@ func (m *Model) navigate(p string) {
 	m.restoreScan()
 	m.restoreLocation(previousRoot)
 }
+
+// Clipboard cleanup belongs only to explicit path input. Entry navigation uses
+// navigate directly, preserving literal quotes and whitespace in file names.
+func (m *Model) navigateInput() {
+	input := m.Input
+	path := strings.TrimSuffix(input, "\r\n")
+	if path == input {
+		path = strings.TrimSuffix(strings.TrimSuffix(input, "\n"), "\r")
+	}
+	if path == "" {
+		m.Message = "Enter or paste a directory path."
+		return
+	}
+	if strings.ContainsAny(path, "\r\n") {
+		m.Message = "Enter one directory path, not multiple lines."
+		return
+	}
+	candidates := []string{input}
+	if path != input {
+		candidates = append(candidates, path)
+	}
+	if len(path) >= 2 && ((path[0] == '\'' && path[len(path)-1] == '\'') || (path[0] == '"' && path[len(path)-1] == '"')) {
+		candidates = append(candidates, path[1:len(path)-1])
+	}
+	for _, candidate := range candidates {
+		if candidate == "" {
+			continue
+		}
+		m.navigate(candidate)
+		if m.Message == "" {
+			return
+		}
+	}
+	m.Message = "Could not open directory: " + m.Message
+}
 func (m *Model) targets() []cleanup.Target {
 	ts := make([]cleanup.Target, 0, len(m.Selected))
 	for _, v := range m.Selected {
@@ -180,6 +221,9 @@ func (m *Model) start(kind string, work func(context.Context) Event) Job {
 	return func() Event { defer c(); return work(ctx) }
 }
 func (m *Model) Apply(e Event) {
+	if e.Kind == "explain" && (m.Screen != "ai-working" || e.ExplainID != m.explanation.id) {
+		return
+	}
 	if m.cancel != nil {
 		m.cancel()
 		m.cancel = nil
@@ -188,6 +232,8 @@ func (m *Model) Apply(e Event) {
 	m.progress = nil
 	m.Offset = 0
 	switch e.Kind {
+	case "explain":
+		m.applyExplanation(e)
 	case "scan":
 		m.Screen = "list"
 		m.resetScan()
@@ -236,6 +282,9 @@ func (m *Model) Apply(e Event) {
 func (m *Model) Key(k string) Job {
 	if m.Busy {
 		if k == "esc" || k == "ctrl+c" {
+			if m.Screen == "ai-working" {
+				m.explanation.cancelled = true
+			}
 			if m.cancel != nil {
 				m.cancel()
 			}
@@ -274,6 +323,8 @@ func (m *Model) Key(k string) Job {
 		m.helpScreen, m.helpOffset = m.Screen, m.Offset
 		m.helpTopic = 0
 		switch m.Screen {
+		case "ai-confirm", "ai-result":
+			m.helpTopic = 1
 		case "masks":
 			m.helpTopic = 3
 		case "scan-confirm":
@@ -283,6 +334,9 @@ func (m *Model) Key(k string) Job {
 		}
 		m.Screen, m.Offset = "help", 0
 		return nil
+	}
+	if m.Screen == "ai-confirm" || m.Screen == "ai-result" {
+		return m.explanationKey(k)
 	}
 	if k == "esc" {
 		if m.Screen == "masks" && m.MaskInput {
@@ -306,7 +360,9 @@ func (m *Model) Key(k string) Job {
 		case "up", "down", "pgup", "pgdown":
 			m.scroll(k)
 		case "enter":
-			m.navigate(m.Input)
+			m.navigateInput()
+		case "ctrl+u":
+			m.Input, m.Message, m.Offset = "", "", 0
 		case "backspace":
 			_, n := utf8.DecodeLastRuneInString(m.Input)
 			if n > 0 {
@@ -375,6 +431,8 @@ func (m *Model) Key(k string) Job {
 	case "v":
 		m.Screen = "details"
 		m.Offset = 0
+	case "i":
+		m.openExplanation()
 	case "l":
 		if len(m.Results) > 0 {
 			m.Screen = "results"
@@ -409,7 +467,7 @@ func (m *Model) Key(k string) Job {
 		}
 	case "r":
 		m.Screen = "root"
-		m.Input = m.Root
+		m.Input, m.Message, m.Offset = "", "", 0
 	case "s":
 		m.Message = ""
 		m.Screen = "scan-confirm"

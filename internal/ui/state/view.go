@@ -89,6 +89,23 @@ func (m *Model) render() (string, int) {
 	footer := "Esc back · ? help"
 	body := []string{}
 	switch m.Screen {
+	case "ai-confirm":
+		lines = lines[:1]
+		body = append(body, "AI EXPLANATION — CONFIRM", "Answer language: "+m.explanationLanguageLabel())
+		if m.Message != "" {
+			body = append(body, Safe(m.Message))
+		}
+		body = append(body, Safe(m.explanation.path), explanationDisclosure, "Enter ask Codex · Esc back")
+		footer = "←/→ Tab language · Enter ask Codex · Esc back\n↑/↓ PgUp/PgDn Home/End scroll"
+	case "ai-working":
+		body = append(body, "ASKING CODEX", Safe(m.explanation.path), "Waiting for an AI explanation...")
+		footer = "Esc / Ctrl+C cancel — wait for completion"
+	case "ai-result":
+		body = append(body, "AI EXPLANATION", Safe(m.explanation.path), "AI inference may be wrong. No files are selected or deleted automatically.", "")
+		for _, line := range strings.Split(m.explanation.text, "\n") {
+			body = append(body, Safe(line))
+		}
+		footer = "↑/↓ PgUp/PgDn Home/End scroll · Esc back"
 	case "details":
 		body = append(body, "ITEM DETAILS", "Current folder: "+Safe(m.Root))
 		if entry, ok := m.current(); ok {
@@ -119,8 +136,8 @@ func (m *Model) render() (string, int) {
 		}
 		body = append(body, "Enter Start scan · Esc Back")
 	case "root":
-		body = append(body, "Open directory (absolute path, ~, or a path relative to the current root)", "> "+Safe(m.Input), "Enter open · Backspace edit")
-		footer = "Esc back"
+		body = append(body, "Open directory: paste or type a path", "> "+Safe(m.Input), "Absolute, ~/ or relative to the folder above.")
+		footer = "Enter open · Ctrl+U clear · Esc back"
 	case "settings":
 		body = append(body, "Deletion mode: "+string(m.Settings.Mode), "←/→ or Space changes mode and saves automatically.")
 		if m.Settings.Mode == config.Permanent {
@@ -178,13 +195,13 @@ func (m *Model) render() (string, int) {
 		return "Resize", 0
 	}
 	content := wrap(lines[1:], width)
-	if m.Message != "" && m.Screen != "details" {
+	if m.Message != "" && m.Screen != "details" && m.Screen != "ai-confirm" {
 		content = append(content, wrap([]string{Safe(m.Message)}, width)...)
 	}
 	content = append(content, wrap(body, width)...)
 	scrollable := false
 	switch m.Screen {
-	case "details", "preview", "confirm", "results", "root":
+	case "details", "preview", "confirm", "results", "root", "ai-confirm", "ai-result":
 		scrollable = true
 	}
 	showIndicator := scrollable && len(content) > available

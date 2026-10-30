@@ -50,7 +50,7 @@ func TestBrowserCompactFrameAndStableWholeCommandFooters(t *testing.T) {
 						t.Fatal("footer clipped a command", footer)
 					}
 					if phase != "filter" {
-						if footer[0] != nav || !strings.Contains(footer[0], "? help") {
+						if footer[0] != nav || !strings.Contains(footer[0], "? help") || !strings.Contains(footer[0], "r path") {
 							t.Fatal("navigation hints changed with scan/selection", phase, footer)
 						}
 					} else if !strings.Contains(footer[0], "Enter apply | Esc clear") || strings.Contains(strings.Join(footer, "\n"), "? help") {

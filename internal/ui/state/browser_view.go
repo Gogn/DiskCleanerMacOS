@@ -62,21 +62,21 @@ func (m *Model) browserFooter() []string {
 	if m.Screen == "filter" {
 		return []string{"Enter apply | Esc clear", "Type to filter this folder"}
 	}
-	nav := "Enter open | ← parent | ? help"
+	nav := "Enter open | r path | ? help"
 	if m.Width >= 64 {
-		nav = commandLine(m.Width, "↑↓ move", "Enter open", "← parent", "? help", "PgUp/PgDn page", "Home/End", "q quit")
+		nav = commandLine(m.Width, "↑↓ move", "Enter open", "← parent", "r path", "? help", "PgUp/PgDn page", "Home/End", "q quit")
 	} else if m.Width >= 40 {
-		nav = commandLine(m.Width, "Enter open", "← parent", "? help", "q quit")
+		nav = commandLine(m.Width, "Enter open", "← parent", "r path", "? help", "q quit")
 	}
 	mark, exclude, clean, details := "Space mark", "e exclude", "d clean", "v info"
 	if m.Width >= 64 {
 		mark, exclude, clean, details = "Space select", "e exclusions", "d cleanup", "v details"
 	}
-	actions := []string{"s scan", exclude, details, "t sort", "/ filter", ". hidden", "E exclude"}
+	actions := []string{"s scan", exclude, details, "i AI explain", "t sort", "/ filter", ". hidden", "E exclude"}
 	if m.Scanned {
-		actions = []string{mark, "s rescan", details, exclude, "t sort", "/ filter", ". hidden", "E exclude"}
+		actions = []string{mark, "s rescan", details, "i AI explain", exclude, "t sort", "/ filter", ". hidden", "E exclude"}
 		if len(m.Selected) > 0 {
-			actions = []string{mark, "p preview", clean, details, exclude, "t sort", "/ filter", ". hidden", "E exclude"}
+			actions = []string{mark, "p preview", clean, details, "i AI explain", exclude, "t sort", "/ filter", ". hidden", "E exclude"}
 		}
 	}
 	return []string{nav, commandLine(m.Width, actions...)}

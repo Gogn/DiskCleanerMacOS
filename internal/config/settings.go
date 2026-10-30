@@ -18,11 +18,12 @@ const (
 )
 
 type Settings struct {
-	Mode  DeleteMode `json:"mode"`
-	Masks []string   `json:"masks"`
+	Mode            DeleteMode `json:"mode"`
+	Masks           []string   `json:"masks"`
+	ExplainLanguage string     `json:"explain_language"`
 }
 
-func Default() Settings { return Settings{Mode: Trash, Masks: []string{}} }
+func Default() Settings { return Settings{Mode: Trash, Masks: []string{}, ExplainLanguage: "en"} }
 
 func Path() (string, error) {
 	h, e := os.UserHomeDir()
@@ -34,6 +35,9 @@ func Path() (string, error) {
 func validate(s Settings) error {
 	if s.Mode != Trash && s.Mode != Permanent {
 		return fmt.Errorf("invalid deletion mode %q", s.Mode)
+	}
+	if s.ExplainLanguage != "en" && s.ExplainLanguage != "ru" {
+		return fmt.Errorf("invalid AI answer language %q", s.ExplainLanguage)
 	}
 	for _, m := range s.Masks {
 		if e := ignore.Validate(m); e != nil {
@@ -51,13 +55,17 @@ func Load(p string) (Settings, error) {
 		return Settings{}, e
 	}
 	var stored struct {
-		Mode  DeleteMode      `json:"mode"`
-		Masks json.RawMessage `json:"masks"`
+		Mode            DeleteMode      `json:"mode"`
+		Masks           json.RawMessage `json:"masks"`
+		ExplainLanguage string          `json:"explain_language"`
 	}
 	if e = json.Unmarshal(b, &stored); e != nil {
 		return Settings{}, fmt.Errorf("invalid settings: %w", e)
 	}
-	s := Settings{Mode: stored.Mode, Masks: []string{}}
+	s := Settings{Mode: stored.Mode, Masks: []string{}, ExplainLanguage: stored.ExplainLanguage}
+	if s.ExplainLanguage == "" {
+		s.ExplainLanguage = "en"
+	}
 	raw := bytes.TrimSpace(stored.Masks)
 	if len(raw) > 0 && raw[0] == '{' {
 		var legacy map[string][]string
@@ -95,6 +103,9 @@ func Load(p string) (Settings, error) {
 	return s, nil
 }
 func Save(p string, s Settings) error {
+	if s.ExplainLanguage == "" {
+		s.ExplainLanguage = "en"
+	}
 	if e := validate(s); e != nil {
 		return e
 	}
