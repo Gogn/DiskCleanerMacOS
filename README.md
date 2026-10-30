@@ -4,6 +4,16 @@ A macOS disk analyzer and cleanup tool with a terminal interface and optional AI
 
 AI explanations can help identify a highlighted file or folder and assess deletion risk while stating uncertainty. Press `i` to review the read-access disclosure and confirm before the request runs. A compatible, signed-in Codex CLI is required; no separate API key is needed.
 
+## Screenshots
+
+**Main interface**
+
+![DiskCleaner terminal browser showing folders, sizes, and navigation controls](docs/images/main-interface.png)
+
+**AI explanation**
+
+![DiskCleaner AI explanation showing allocated and logical sizes and a deletion-risk assessment](docs/images/ai-explanation.png)
+
 ## Build and run
 
 Requires Go 1.26 or newer.
