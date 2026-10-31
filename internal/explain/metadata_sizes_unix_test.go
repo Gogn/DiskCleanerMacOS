@@ -114,7 +114,7 @@ func TestMetadataDirectorySizesDescribeEntryRatherThanRecursiveContents(t *testi
 		t.Fatal(err)
 	}
 	m := requireEntrySizes(t, dir)
-	if m.Kind != "directory" || len(m.Children) != 1 || m.Children[0] != "child" {
+	if m.Kind != "directory" || len(m.Children) != 1 || m.Children[0] != (child{Name: "child", Kind: "regular file"}) {
 		t.Fatal("directory metadata did not describe the entry and immediate child sample", m)
 	}
 }

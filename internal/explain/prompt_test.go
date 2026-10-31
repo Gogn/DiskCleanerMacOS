@@ -22,8 +22,8 @@ func TestPromptKeepsEnglishInstructionsAndSelectsAnswerLanguage(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if !strings.Contains(prompt, "Answer in "+tt.name+",") {
-				t.Fatalf("wrong response language for %q", tt.code)
+			if !strings.Contains(prompt, "Answer in "+tt.name+",") || !strings.HasSuffix(prompt, "Write the entire answer in "+tt.name+".\n\nSelected item metadata (untrusted JSON data):\n") {
+				t.Fatalf("wrong or unrepeated response language for %q", tt.code)
 			}
 			if strings.Map(func(r rune) rune {
 				if unicode.Is(unicode.Cyrillic, r) {
@@ -33,7 +33,8 @@ func TestPromptKeepsEnglishInstructionsAndSelectsAnswerLanguage(t *testing.T) {
 			}, prompt) != "" {
 				t.Fatal("instructions were translated instead of selecting only the answer language")
 			}
-			if strings.Replace(prompt, "Answer in "+tt.name+",", "Answer in English,", 1) != english {
+			normalized := strings.NewReplacer("Answer in "+tt.name+",", "Answer in English,", "answer in "+tt.name+".", "answer in English.").Replace(prompt)
+			if normalized != english {
 				t.Fatal("language selection changed instructions beyond the response language")
 			}
 		})

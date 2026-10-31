@@ -12,6 +12,20 @@ import (
 type Request struct {
 	Path     string
 	Language string // "en" (also the empty default) or "ru".
+	// LastScan is the app's latest measurement of this item, or nil when the
+	// current folder has no scan result for it. It is a snapshot, not live.
+	LastScan *ScanResult
+	// DeleteMode is the configured cleanup mode, "trash" or "permanent";
+	// empty when unknown. It informs the recovery assessment only.
+	DeleteMode string
+}
+
+// ScanResult carries a previously measured recursive size into the request.
+type ScanResult struct {
+	AllocatedBytes *int64 // nil when no size was measured.
+	State          string // "complete", "partial", "unknown" or "skipped".
+	SkipReason     string // Set only for skipped items.
+	ScannedAt      time.Time
 }
 
 var ErrCLINotFound = errors.New("Codex CLI was not found; install Codex and sign in before retrying")

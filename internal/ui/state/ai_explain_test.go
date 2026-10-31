@@ -136,7 +136,7 @@ func TestAIExplanationConfirmsHighlightedItemAndPreservesBrowserState(t *testing
 		t.Fatal("AI explanation started before confirmation")
 	}
 	view := m.View()
-	for _, want := range []string{Safe(entry.Path), "Sends path, name, type, size, modification time"} {
+	for _, want := range []string{Safe(entry.Path), "Sends path, name, type, sizes including the last scan result"} {
 		if !strings.Contains(view, want) {
 			t.Fatal("confirmation omitted captured path or disclosure", want, view)
 		}
@@ -269,5 +269,44 @@ func TestAIExplanationConfirmationAndResultsScrollOnlyOnOverflow(t *testing.T) {
 	m.Key("home")
 	if m.Offset != 0 {
 		t.Fatal("result Home did not return to start")
+	}
+}
+
+func TestAIExplanationRequestCarriesLastScanAndDeleteMode(t *testing.T) {
+	m := fixture(t)
+	var got explain.Request
+	m.Explain = func(ctx context.Context, request explain.Request) (string, error) {
+		got = request
+		return "Answer.", nil
+	}
+	ask := func(name string) explain.Request {
+		t.Helper()
+		m.Key("home")
+		for entry, ok := m.current(); ok && entry.Name != name; entry, ok = m.current() {
+			m.Key("down")
+		}
+		m.Key("i")
+		m.Apply(m.Key("enter")())
+		m.Key("esc")
+		if filepath.Base(got.Path) != name {
+			t.Fatal("explained the wrong item", got.Path)
+		}
+		return got
+	}
+	if r := ask("cache"); r.LastScan != nil || r.DeleteMode != "trash" {
+		t.Fatalf("unscanned item claimed a scan result or lost the deletion mode: %+v", r)
+	}
+	scanNow(t, m)
+	file := ask("file\n\x1b")
+	want := m.Snapshot.Entries[file.Path]
+	if file.LastScan == nil || file.LastScan.State != "complete" || file.LastScan.AllocatedBytes == nil || uint64(*file.LastScan.AllocatedBytes) != want.Bytes || !file.LastScan.ScannedAt.Equal(m.LastScanAt) {
+		t.Fatalf("scan measurement was not passed to the explanation: %+v", file.LastScan)
+	}
+	m.Key("home")
+	m.Key("E")
+	scanNow(t, m)
+	excluded := ask("cache")
+	if excluded.LastScan == nil || excluded.LastScan.State != "skipped" || excluded.LastScan.AllocatedBytes != nil || excluded.LastScan.SkipReason != "excluded by a name pattern" {
+		t.Fatalf("excluded item was not reported as skipped by a pattern: %+v", excluded.LastScan)
 	}
 }

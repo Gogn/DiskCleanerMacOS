@@ -3,10 +3,14 @@ package state
 import (
 	"context"
 	"diskcleaner/internal/explain"
+	"diskcleaner/internal/ignore"
+	"diskcleaner/internal/scan"
+	"math"
+	"path/filepath"
 	"strings"
 )
 
-const explanationDisclosure = "Sends path, name, type, size, modification time and a limited list of child names to Codex. Codex uses read-only command permissions. It may read file contents and send them to the AI service, including files outside this item."
+const explanationDisclosure = "Sends path, name, type, sizes including the last scan result, modification time, ownership, a symbolic link's target, the deletion mode, and a limited list of child names and types to Codex. Codex uses read-only command permissions. It may read file contents and send them to the AI service, including files outside this item."
 
 type explanationState struct {
 	id        uint64
@@ -73,7 +77,8 @@ func (m *Model) explanationKey(key string) Job {
 			m.leaveExplanation("AI explanation is unavailable.")
 			return nil
 		}
-		request, run, id := explain.Request{Path: m.explanation.path, Language: m.explanationLanguage()}, m.Explain, m.explanation.id
+		request := explain.Request{Path: m.explanation.path, Language: m.explanationLanguage(), LastScan: m.explanationScan(m.explanation.path), DeleteMode: string(m.Settings.Mode)}
+		run, id := m.Explain, m.explanation.id
 		return m.start("ai-working", func(ctx context.Context) Event {
 			text, err := run(ctx, request)
 			return Event{Kind: "explain", ExplainID: id, Explanation: text, Err: err}
@@ -88,6 +93,31 @@ func (m *Model) explanationKey(key string) Job {
 		m.scroll(key)
 	}
 	return nil
+}
+
+// explanationScan reports the cached recursive measurement shown in the
+// browser, so the answer can describe a folder's contents rather than its entry.
+func (m *Model) explanationScan(path string) *explain.ScanResult {
+	measurement, ok := m.Snapshot.Entries[path]
+	if !m.Scanned || !ok || m.LastScanAt.IsZero() {
+		return nil
+	}
+	result := &explain.ScanResult{ScannedAt: m.LastScanAt}
+	switch measurement.State {
+	case scan.Complete, scan.Partial:
+		bytes := int64(min(measurement.Bytes, math.MaxInt64))
+		result.AllocatedBytes = &bytes
+		result.State = strings.ToLower(measurement.State.String())
+	case scan.Skipped:
+		result.State = "skipped"
+		result.SkipReason = "not measured, for example on a different volume"
+		if ignore.Any(m.Masks(), filepath.Base(path)) {
+			result.SkipReason = "excluded by a name pattern"
+		}
+	default:
+		result.State = "unknown"
+	}
+	return result
 }
 
 func (m *Model) applyExplanation(event Event) {
