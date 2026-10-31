@@ -1,6 +1,6 @@
 # User guide
 
-This guide describes the current source checkout. The published `v0.1.0-beta.1` predates the later audit fixes recorded in the [validation notes](validation.md#published-prerelease-and-current-source). For downloads and installation, start with the [project README](../README.md).
+This guide describes the current source checkout. The published `v0.1.0-beta.2` matches the behavior described here; any later source changes are recorded in the [validation notes](validation.md#published-prerelease-and-current-source). For downloads and installation, start with the [project README](../README.md).
 
 ## Contents
 

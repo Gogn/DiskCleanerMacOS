@@ -1,6 +1,6 @@
 # Documentation
 
-Start with the [project README](../README.md) for downloads, screenshots, building and a quick start. The detailed documents below describe the current source checkout. The published `v0.1.0-beta.1` predates later audit fixes; [validation status](validation.md#published-prerelease-and-current-source) distinguishes the release from current source.
+Start with the [project README](../README.md) for downloads, screenshots, building and a quick start. The detailed documents below describe the current source checkout. The latest published prerelease is `v0.1.0-beta.2`; [validation status](validation.md#published-prerelease-and-current-source) records its source commit and how it differs from earlier releases and the current source.
 
 ## Current references
 
