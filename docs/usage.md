@@ -1,6 +1,6 @@
 # User guide
 
-This guide describes the current source checkout. The published `v0.1.0-beta.2` predates some behavior described here; the [validation notes](validation.md#published-prerelease-and-current-source) distinguish its contents from the current source. For downloads and installation, start with the [project README](../README.md).
+This guide describes the current source checkout. The published `v0.1.0-beta.2` predates some behavior described here; the [validation notes](validation.md#published-prerelease-and-current-source) distinguish historical release contents from current-source behavior. Beta.3 is scoped to Apple Silicon (`arm64`) only; see the [project README](../README.md) for download and installation information.
 
 ## Contents
 

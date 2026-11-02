@@ -36,7 +36,7 @@
 
 ## Releases
 
-- Build versioned prerelease archives with `./scripts/build-release.sh vMAJOR.MINOR.PATCH[-prerelease]` from a clean committed checkout. The script creates Apple Silicon and Intel tarballs and `SHA256SUMS`; each archive includes `diskcleaner`, `LICENSE`, and `THIRD_PARTY_NOTICES.txt`.
+- Build versioned Apple Silicon (`arm64`) prerelease archives with `./scripts/build-release.sh vMAJOR.MINOR.PATCH[-prerelease]` from a clean committed checkout. The current release scope is arm64 only; the script creates an arm64 tarball and `SHA256SUMS`, and the archive includes `diskcleaner`, `LICENSE`, and `THIRD_PARTY_NOTICES.txt`.
 - Verify version output, archive members, and checksums. Rebuild from the final commit before publishing; never publish trial artifacts from a working tree. Do not overwrite assets on a published tag—use a new version/tag instead.
 - State signing, notarization, OS, architecture, and Trash-test status precisely. Do not recommend globally disabling Gatekeeper.
 - The current GitHub owner/remote is `Gogn`; verify the configured remote and active identity before release actions. Do not hardcode a personal email or store credentials/secrets in the repository.

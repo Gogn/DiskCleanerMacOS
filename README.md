@@ -14,27 +14,26 @@ AI explanations can help identify a highlighted file or folder and assess deleti
 
 ![DiskCleaner AI explanation showing allocated and logical sizes and a deletion-risk assessment](docs/images/ai-explanation.png)
 
-## Download v0.1.0-beta.2 prerelease
+## Download v0.1.0-beta.3 prerelease
 
-[Download the v0.1.0-beta.2 prerelease from GitHub](https://github.com/Gogn/DiskCleanerMacOS/releases/tag/v0.1.0-beta.2).
+[Download the v0.1.0-beta.3 prerelease from GitHub](https://github.com/Gogn/DiskCleanerMacOS/releases/tag/v0.1.0-beta.3).
 
-- `diskcleaner_v0.1.0-beta.2_darwin_arm64.tar.gz` — Apple Silicon (M-series)
-- `diskcleaner_v0.1.0-beta.2_darwin_amd64.tar.gz` — Intel Mac
+- `diskcleaner_v0.1.0-beta.3_darwin_arm64.tar.gz` — Apple Silicon (M-series)
 - `SHA256SUMS` — archive checksums
 
-Download the archive for your Mac and `SHA256SUMS`. Run `shasum -a 256` on the archive and compare its hash with the matching line in `SHA256SUMS`, then extract it in Terminal:
+Download the arm64 archive and `SHA256SUMS`. Run `shasum -a 256` on the archive and compare its hash with the matching line in `SHA256SUMS`, then extract it in Terminal:
 
 ```sh
-shasum -a 256 diskcleaner_v0.1.0-beta.2_darwin_arm64.tar.gz
-tar -xzf diskcleaner_v0.1.0-beta.2_darwin_arm64.tar.gz
+shasum -a 256 diskcleaner_v0.1.0-beta.3_darwin_arm64.tar.gz
+tar -xzf diskcleaner_v0.1.0-beta.3_darwin_arm64.tar.gz
 ./diskcleaner
 ```
 
-Use the `amd64` filename in the commands on Intel. Each archive contains `diskcleaner`, `LICENSE`, and `THIRD_PARTY_NOTICES.txt`; Go is not required. This is a prerelease: only macOS 27.0.1 on Apple Silicon has been run. macOS 26 and native Intel runtime behavior are unverified; the Intel binary's `-version` output was checked under Rosetta only. Successful real Trash movement also remains unverified.
+Beta.3 is an Apple Silicon-only release. Each archive contains `diskcleaner`, `LICENSE`, and `THIRD_PARTY_NOTICES.txt`; Go is not required. macOS 26 and successful real Trash movement remain unverified. Intel is outside this release's scope.
 
-Neither binary is Developer ID-signed or notarized (Apple Silicon is ad-hoc-signed; Intel is unsigned), so macOS may show a security warning. Verify the official checksum before opening. If you still choose to proceed, use Apple's standard [Open Anyway flow](https://support.apple.com/en-us/102445) for this download; do not disable Gatekeeper globally.
+The app is not Developer ID-signed or notarized, so macOS may show a security warning. Verify the official checksum before opening. If you still choose to proceed, use Apple's standard [Open Anyway flow](https://support.apple.com/en-us/102445) for this download; do not disable Gatekeeper globally.
 
-The published release is built from [commit `eb6cd74`](https://github.com/Gogn/DiskCleanerMacOS/tree/eb6cd74930ea10168e5ab3d56ab58fe0b1de0241) and includes the audit fixes and AI explanation changes made after beta.1. Later documentation-only commits are not part of the archives; see the [release and source validation status](docs/validation.md#published-prerelease-and-current-source).
+See the [release and source validation status](docs/validation.md#published-prerelease-and-current-source) for the exact source revision and verification evidence for each release.
 
 ## Build and run
 
@@ -83,7 +82,7 @@ See the [user guide](docs/usage.md) for all keys, path entry, saved scan results
 - [Validation status](docs/validation.md) — recorded checks and remaining release gates.
 - [Release guide](docs/releasing.md) — build and verify a new prerelease.
 
-Current local verification is recorded separately from published-release evidence; macOS 26, native Intel runtime support and real Trash movement still have open release gates.
+Current local verification is recorded separately from published-release evidence; macOS 26 and real Trash movement remain unverified. Intel is outside the beta.3 release scope.
 
 For scan-cache iteration, run `./scripts/check.sh quick`. It runs focused `internal/ui/state` tests whose names match `SQLite|ScanCache|Cleanup`. For changes in other packages, run the focused package test command while iterating.
 
