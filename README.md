@@ -29,11 +29,11 @@ tar -xzf diskcleaner_v0.1.0-beta.3_darwin_arm64.tar.gz
 ./diskcleaner
 ```
 
-Beta.3 is an Apple Silicon-only release. Each archive contains `diskcleaner`, `LICENSE`, and `THIRD_PARTY_NOTICES.txt`; Go is not required. macOS 26 and successful real Trash movement remain unverified. Intel is outside this release's scope.
+Beta.3 is an Apple Silicon-only release. Its archive contains `diskcleaner`, `LICENSE`, and `THIRD_PARTY_NOTICES.txt`; Go is not required. macOS 26 and successful real Trash movement remain unverified. Intel is outside this release's scope.
 
 The app is not Developer ID-signed or notarized, so macOS may show a security warning. Verify the official checksum before opening. If you still choose to proceed, use Apple's standard [Open Anyway flow](https://support.apple.com/en-us/102445) for this download; do not disable Gatekeeper globally.
 
-See the [release and source validation status](docs/validation.md#published-prerelease-and-current-source) for the exact source revision and verification evidence for each release.
+This release was built from [source commit `d5c37d06507d0341932c98fef9a89e27af08327c`](https://github.com/Gogn/DiskCleanerMacOS/commit/d5c37d06507d0341932c98fef9a89e27af08327c). See the [release and source validation status](docs/validation.md#published-prerelease-and-current-source) for verification evidence and earlier release history.
 
 ## Build and run
 

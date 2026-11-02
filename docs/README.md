@@ -1,6 +1,6 @@
 # Documentation
 
-Start with the [project README](../README.md) for downloads, screenshots, building and a quick start. The detailed documents below describe the current source checkout. Beta.2 remains the latest published prerelease; the next release target is `v0.1.0-beta.3`, scoped to Apple Silicon (`arm64`) only. [Validation status](validation.md#published-prerelease-and-current-source) preserves beta.1/beta.2 evidence and distinguishes it from current-source verification.
+Start with the [project README](../README.md) for downloads, screenshots, building and a quick start. The detailed documents below describe the current source checkout. The latest published prerelease is `v0.1.0-beta.3`, scoped to Apple Silicon (`arm64`) only. [Validation status](validation.md#published-prerelease-and-current-source) preserves beta.1/beta.2 evidence and distinguishes it from current-source verification.
 
 ## Current references
 

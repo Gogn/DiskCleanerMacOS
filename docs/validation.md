@@ -1,6 +1,6 @@
 # Validation status
 
-The MVP is implemented. The [current design specification](design.md) is the behavior authority; the deferred tree-navigation document is not part of this release. Beta.1 and beta.2 are published historical prereleases; beta.3 is the current release target and is scoped to Apple Silicon (`arm64`) only. Intel is no longer a target for the current release. Published releases do not certify all target platforms or close the remaining gates below.
+The MVP is implemented. The [current design specification](design.md) is the behavior authority; the deferred tree-navigation document is not part of this release. Beta.1 and beta.2 are historical prereleases; beta.3 is the current published release, scoped to Apple Silicon (`arm64`) only. Intel is no longer a target for the current release. Published releases do not certify all target platforms or close the remaining gates below.
 
 ## Current behavior and verification update — 2026-10-30
 
@@ -23,7 +23,9 @@ This section records evidence for the source checkout after the later audit fixe
 
 [`v0.1.0-beta.1`](https://github.com/Gogn/DiskCleanerMacOS/releases/tag/v0.1.0-beta.1) was published on 2026-10-30 from [commit `6bec20085f53659365ca7ce522acad9d759970fd`](https://github.com/Gogn/DiskCleanerMacOS/commit/6bec20085f53659365ca7ce522acad9d759970fd) with the same archive layout and signing status; its `-version` checks covered both binaries (Intel under Rosetta only). It predates all fixes recorded above.
 
-Documentation commits after `eb6cd74` are not in the beta.2 archives. Beta.3 is the next release target; do not replace published assets on beta.1 or beta.2 tags.
+[`v0.1.0-beta.3`](https://github.com/Gogn/DiskCleanerMacOS/releases/tag/v0.1.0-beta.3) was published on 2026-11-02 from [commit `d5c37d06507d0341932c98fef9a89e27af08327c`](https://github.com/Gogn/DiskCleanerMacOS/commit/d5c37d06507d0341932c98fef9a89e27af08327c). It contains exactly one archive, `diskcleaner_v0.1.0-beta.3_darwin_arm64.tar.gz`, and `SHA256SUMS`. The checksum file has one arm64 entry; the downloaded assets matched the verified local files byte for byte, and `shasum -a 256 -c SHA256SUMS` passed. The archive contains exactly `diskcleaner` (mode `0755`), `LICENSE` (mode `0644`), and `THIRD_PARTY_NOTICES.txt` (mode `0644`). Its executable is an `arm64` Mach-O built with `CGO_ENABLED=0` and `-trimpath`; it embeds `vcs.modified=false` and revision `d5c37d06507d0341932c98fef9a89e27af08327c`. It printed `DiskCleaner 0.1.0-beta.3`. The ad-hoc linker signature passed `codesign --verify --strict`; the app is not Developer ID-signed or notarized. The race suite, `go vet ./...`, and native build passed on the unchanged application source commit `659e1981946a688120b261d2776cbc044c02c35f` on macOS 27.0.1 (Apple Silicon, Go 1.27.3); the final release commit contains documentation and packaging changes only. macOS 26 and successful real Trash movement remain unverified. Intel is outside the release scope.
+
+Documentation commits after `d5c37d0` are not in the beta.3 archive. The next prerelease needs a new tag such as beta.4; do not replace assets on published tags.
 
 ## Recorded source-checkout verification
 
