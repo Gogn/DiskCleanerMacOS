@@ -195,9 +195,18 @@ func (g *Guard) Refresh() error {
 	}
 	return nil
 }
-func (g *Guard) checkObject(p string) error {
-	if ignore.Any(g.IgnoredMasks, filepath.Base(p)) {
-		return fmt.Errorf("excluded name: %q", filepath.Base(p))
+
+// ExcludedNameError distinguishes a name exclusion from non-overridable guards.
+type ExcludedNameError struct{ Path string }
+
+func (e *ExcludedNameError) Error() string {
+	return fmt.Sprintf("excluded name: %q", filepath.Base(e.Path))
+}
+
+func (g *Guard) checkObject(p string) error { return g.checkObjectNames(p, false) }
+func (g *Guard) checkObjectNames(p string, allowExcludedName bool) error {
+	if !allowExcludedName && ignore.Any(g.IgnoredMasks, filepath.Base(p)) {
+		return &ExcludedNameError{Path: p}
 	}
 	for _, r := range g.rules {
 		if p == r.path || (r.tree && within(p, r.path)) {
@@ -245,8 +254,9 @@ func (g *Guard) checkObject(p string) error {
 	}
 	return nil
 }
-func (g *Guard) checkPath(p string) error {
-	if e := g.checkObject(p); e != nil {
+func (g *Guard) checkPath(p string) error { return g.checkPathNames(p, false) }
+func (g *Guard) checkPathNames(p string, allowExcludedName bool) error {
+	if e := g.checkObjectNames(p, allowExcludedName); e != nil {
 		return e
 	}
 	info, e := os.Lstat(p)
@@ -300,6 +310,23 @@ func (g *Guard) CheckTarget(p string) error {
 	return g.checkPath(filepath.Join(parent, filepath.Base(p)))
 }
 func (g *Guard) CheckTree(ctx context.Context, p string) error {
+	return g.checkTree(ctx, p, false)
+}
+
+// CheckTreeIncludingExcludedContents permits descendant names only for a
+// separately confirmed directory. The selected root, protected objects,
+// volume boundaries and all symbolic-link target checks remain guarded.
+func (g *Guard) CheckTreeIncludingExcludedContents(ctx context.Context, p string) error {
+	info, err := os.Lstat(p)
+	if err != nil {
+		return err
+	}
+	if !info.IsDir() {
+		return fmt.Errorf("exclusion override requires a directory")
+	}
+	return g.checkTree(ctx, p, true)
+}
+func (g *Guard) checkTree(ctx context.Context, p string, allowExcludedContents bool) error {
 	if e := ctx.Err(); e != nil {
 		return e
 	}
@@ -324,6 +351,6 @@ func (g *Guard) CheckTree(ctx context.Context, p string) error {
 		if i.dev != rootID.dev {
 			return fmt.Errorf("different volume inside selection: %q", path)
 		}
-		return g.checkPath(path)
+		return g.checkPathNames(path, allowExcludedContents && path != p)
 	})
 }

@@ -2,7 +2,6 @@ package state
 
 import (
 	"context"
-	"diskcleaner/internal/cleanup"
 	"diskcleaner/internal/scan"
 	"errors"
 	"os"
@@ -63,8 +62,8 @@ func TestScanCacheRestoresCanonicalRootsWithoutScanningOrSelections(t *testing.T
 		t.Fatal("canonical alias lost cached data or cache shared UI storage")
 	}
 	fresh := New(a, m.Settings, m.Guard, m.ConfigPath)
-	if fresh.Scanned || len(fresh.Snapshot.Entries) != 0 {
-		t.Fatal("new model retained a previous session's scan")
+	if !fresh.Scanned || !reflect.DeepEqual(fresh.Snapshot, want) || len(fresh.Selected) != 0 {
+		t.Fatal("new model did not restore previous measurements independently of selection")
 	}
 }
 
@@ -175,32 +174,36 @@ func TestRescanReplacesOnlyItsRootAndFailureCannotRestoreOldCache(t *testing.T) 
 			if m.Scanned {
 				t.Fatal("failed rescan resurrected old measurements on revisit")
 			}
+			fresh := New(a, m.Settings, m.Guard, m.ConfigPath)
+			if fresh.Scanned {
+				t.Fatal("new session resurrected measurements invalidated by a failed rescan")
+			}
+			fresh.navigate(b)
+			if !fresh.Scanned {
+				t.Fatal("failed rescan erased another root from persistent cache")
+			}
 		})
 	}
 }
 
-func TestGlobalMaskChangesAndCleanupAttemptsEvictAllScans(t *testing.T) {
-	for _, action := range []string{"masks", "cleanup"} {
-		t.Run(action, func(t *testing.T) {
-			m := fixture(t)
-			a, b := m.Root, filepath.Join(m.Root, "cache")
-			scanNow(t, m)
-			m.navigate(b)
-			scanNow(t, m)
-			if action == "masks" {
-				m.toggleMask("unused-global-pattern")
-			} else {
-				m.Apply(Event{Kind: "cleanup", Results: []cleanup.Result{{Outcome: cleanup.Skipped}}})
-			}
-			if m.Scanned {
-				t.Fatal("invalidation retained current measurements")
-			}
-			for _, root := range []string{a, b} {
-				m.navigate(root)
-				if m.Scanned || len(m.Snapshot.Entries) != 0 {
-					t.Fatal("invalidation retained cached measurements", root)
-				}
-			}
-		})
+func TestGlobalMaskChangesEvictAllScans(t *testing.T) {
+	m := fixture(t)
+	a, b := m.Root, filepath.Join(m.Root, "cache")
+	scanNow(t, m)
+	m.navigate(b)
+	scanNow(t, m)
+	m.toggleMask("unused-global-pattern")
+	if m.Scanned {
+		t.Fatal("invalidation retained current measurements")
+	}
+	for _, root := range []string{a, b} {
+		fresh := New(root, m.Settings, m.Guard, m.ConfigPath)
+		if fresh.Scanned || len(fresh.Snapshot.Entries) != 0 {
+			t.Fatal("new session restored globally invalidated measurements", root)
+		}
+		m.navigate(root)
+		if m.Scanned || len(m.Snapshot.Entries) != 0 {
+			t.Fatal("invalidation retained cached measurements", root)
+		}
 	}
 }

@@ -46,13 +46,13 @@ func TestLastScanTimeRecordsSuccessAndRestoresOriginalCachedTime(t *testing.T) {
 		t.Fatal("rescan time did not survive a later cache restore")
 	}
 	fresh := New(a, m.Settings, m.Guard, m.ConfigPath)
-	if !fresh.LastScanAt.IsZero() {
-		t.Fatal("scan time survived model lifetime")
+	if !fresh.LastScanAt.Equal(aTime) {
+		t.Fatal("persistent cache did not preserve original completion time", fresh.LastScanAt, aTime)
 	}
 }
 
 func TestLastScanTimeClearsWithInvalidatedMeasurements(t *testing.T) {
-	for _, action := range []string{"failure", "cancellation", "masks", "cleanup"} {
+	for _, action := range []string{"failure", "cancellation", "masks"} {
 		t.Run(action, func(t *testing.T) {
 			m := fixture(t)
 			a, b := m.Root, filepath.Join(m.Root, "cache")
@@ -77,8 +77,6 @@ func TestLastScanTimeClearsWithInvalidatedMeasurements(t *testing.T) {
 				m.Apply(job())
 			case "masks":
 				m.toggleMask("unused-pattern")
-			case "cleanup":
-				m.Apply(Event{Kind: "cleanup"})
 			}
 			if !m.LastScanAt.IsZero() {
 				t.Fatal("invalidated scan retained completion time")

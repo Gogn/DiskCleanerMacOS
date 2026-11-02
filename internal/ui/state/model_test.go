@@ -136,7 +136,7 @@ func TestSelectionCapturedBeforeConfirmation(t *testing.T) {
 		t.Fatal("duplicate execution")
 	}
 	m.Apply(job())
-	if calls != 0 || m.Results[0].Outcome != cleanup.Skipped || m.Scanned || len(m.Selected) != 0 {
+	if calls != 0 || m.Results[0].Outcome != cleanup.Skipped || !m.Scanned || len(m.Selected) != 0 {
 		t.Fatal(m.Results)
 	}
 }
@@ -155,7 +155,7 @@ func TestSizeLabelsFollowDeleteMode(t *testing.T) {
 		}
 	}
 }
-func TestCleanupResultsInvalidateSnapshot(t *testing.T) {
+func TestCleanupResultsKeepSnapshotAndClearSelection(t *testing.T) {
 	m := fixture(t)
 	scanNow(t, m)
 	m.Key("space")
@@ -166,7 +166,7 @@ func TestCleanupResultsInvalidateSnapshot(t *testing.T) {
 		t.Fatal("did not wait")
 	}
 	m.Apply(job())
-	if m.Scanned || len(m.Selected) != 0 || len(m.Results) != 1 || m.Results[0].Outcome != cleanup.Skipped {
+	if !m.Scanned || len(m.Selected) != 0 || len(m.Results) != 1 || m.Results[0].Outcome != cleanup.Skipped {
 		t.Fatal(m.Results)
 	}
 }

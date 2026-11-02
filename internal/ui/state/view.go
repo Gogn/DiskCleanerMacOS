@@ -65,6 +65,16 @@ func (m *Model) View() string { v, _ := m.render(); return v }
 
 func (m *Model) diagnostics() []string {
 	var lines []string
+	if m.RestoredScan {
+		warning := "Saved sizes may have changed"
+		if !m.LastScanAt.IsZero() {
+			warning += "; last scan " + m.LastScanAt.Local().Format("2006-01-02 15:04")
+		}
+		lines = append(lines, m.paint(red, warning+"; press s to rescan."))
+	}
+	if m.cacheWriteFailed {
+		lines = append(lines, "Could not save scan cache; saved sizes may be unavailable next session.")
+	}
 	if m.Message != "" {
 		lines = append(lines, Safe(m.Message))
 	}
@@ -164,8 +174,30 @@ func (m *Model) render() (string, int) {
 			body = append(body, Safe(t.Path))
 		}
 		footer = "Enter execute ONCE · Esc cancel · ↑/↓ scroll"
+	case "exclusion-confirm":
+		body = append(body, m.paint(red, "FOLDER CONTAINS EXCLUDED CONTENTS"))
+		if len(m.exclusionQueue) > 0 {
+			body = append(body, Safe(m.exclusionQueue[0].Path))
+			if path := m.currentExcludedPath(); path != "" {
+				body = append(body, "Excluded descendant: "+Safe(path))
+			}
+		}
+		body = append(body, "This folder was skipped because a descendant name is excluded.", "Mode: "+strings.ToUpper(string(m.ConfirmedMode)), "Retry removes the ENTIRE folder, including ALL excluded contents.", "Protected objects and symbolic-link checks still apply.", "Other completed items will not run again. Global exclusions stay unchanged.")
+		if m.ConfirmedMode == config.Permanent {
+			body = append(body, m.paint(red, "Permanent deletion cannot be undone."))
+		}
+		leave, remove := "[x] Leave folder untouched", "[ ] Retry entire folder (including excluded contents)"
+		if m.exclusionDelete {
+			leave, remove = "[ ] Leave folder untouched", "[x] Retry entire folder (including excluded contents)"
+		}
+		body = append(body, "", leave, m.paint(red, remove))
+		choice := "Choice: LEAVE folder untouched"
+		if m.exclusionDelete {
+			choice = m.paint(red, "Choice: RETRY ALL ("+strings.ToUpper(string(m.ConfirmedMode))+")")
+		}
+		footer = choice + "\n←/→ Tab choose · Enter confirm\nEsc leave pending · ↑/↓ scroll"
 	case "results":
-		body = append(body, "CLEANUP REPORT — sizes and selection cleared.", "Space reclaimed was not measured. Start a new scan manually.")
+		body = append(body, "CLEANUP REPORT — selection cleared; unaffected sizes retained.", "Space reclaimed was not measured. Rescan affected folders manually.")
 		for _, r := range m.Results {
 			line := r.Outcome.String() + "  " + Safe(r.Path)
 			if r.Err != nil {
@@ -197,12 +229,18 @@ func (m *Model) render() (string, int) {
 	}
 	content := wrap(lines[1:], width)
 	if m.Message != "" && m.Screen != "details" && m.Screen != "ai-confirm" {
-		content = append(content, wrap([]string{Safe(m.Message)}, width)...)
+		message := wrap([]string{Safe(m.Message)}, width)
+		if m.Screen == "confirm" || m.Screen == "exclusion-confirm" {
+			// A long root path must not hide why cleanup was not started.
+			content = append(message, content...)
+		} else {
+			content = append(content, message...)
+		}
 	}
 	content = append(content, wrap(body, width)...)
 	scrollable := false
 	switch m.Screen {
-	case "details", "preview", "confirm", "results", "root", "ai-confirm", "ai-result":
+	case "details", "preview", "confirm", "exclusion-confirm", "results", "root", "ai-confirm", "ai-result":
 		scrollable = true
 	}
 	showIndicator := scrollable && len(content) > available

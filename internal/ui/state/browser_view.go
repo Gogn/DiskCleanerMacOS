@@ -131,7 +131,24 @@ func (m *Model) browserLayout() browserLayout {
 	diagnostic := ""
 	if diagnostics := m.diagnostics(); len(diagnostics) > 0 {
 		diagnostic = strings.Join(diagnostics, " | ")
-		if cells(diagnostic) > w {
+		if m.RestoredScan && w < 64 {
+			// Keep the original measurement time and uncertainty readable even
+			// in the smallest browser; details retain the full date and warning.
+			warning := "Saved sizes may have changed"
+			if !m.LastScanAt.IsZero() {
+				warning = "Saved " + m.LastScanAt.Local().Format("15:04") + " may have changed"
+			}
+			diagnostic = m.paint(red, warning)
+		} else if m.RestoredScan && cells(diagnostic) > w {
+			warning := "Saved sizes may have changed; s rescan"
+			if !m.LastScanAt.IsZero() {
+				warning += " | Last scan " + m.LastScanAt.Local().Format("15:04")
+			}
+			if cells(warning+" | v details") <= w {
+				warning += " | v details"
+			}
+			diagnostic = m.paint(red, warning)
+		} else if cells(diagnostic) > w {
 			diagnostic = fit(diagnostic, w-len(" | v details")) + " | v details"
 		}
 		required = append(required, diagnostic)
@@ -174,7 +191,7 @@ func (m *Model) browserLayout() browserLayout {
 	for _, line := range extra {
 		header = append(header, line)
 	}
-	if m.Scanned && !m.LastScanAt.IsZero() && len(header)+len(required) < budget {
+	if m.Scanned && !m.RestoredScan && !m.LastScanAt.IsZero() && len(header)+len(required) < budget {
 		// Full date and completeness remain available in item details.
 		status := m.scanStatus(false)
 		if cells(status) > w {
@@ -273,6 +290,18 @@ func (m *Model) browserRows(visible []int) (string, []string, int) {
 					status = "Size unknown"
 				}
 			}
+		}
+		if m.RestoredScan && status == "Complete" && !m.NoColor {
+			// Change only the status foreground, then restore the row's
+			// foreground without resetting its cursor background.
+			foreground := color
+			if foreground == "" {
+				foreground = "39"
+				if current {
+					foreground = "37"
+				}
+			}
+			status = "\x1b[31m" + status + "\x1b[" + foreground + "m"
 		}
 		line := cursor + mark + pad(name, nameWidth, false)
 		if wide {

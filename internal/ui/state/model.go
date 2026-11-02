@@ -28,6 +28,7 @@ type Event struct {
 	Explanation  string
 	ExplainID    uint64
 	scanObserved *scanObservation
+	cacheToken   *scanCacheToken
 }
 type Model struct {
 	Root                          string
@@ -39,6 +40,13 @@ type Model struct {
 	Snapshot                      scan.Snapshot
 	Scanned                       bool
 	LastScanAt                    time.Time
+	RestoredScan                  bool
+	cacheWriteFailed              bool
+	cacheInitialized              bool
+	cleanupCacheLock              *os.File
+	cacheEpoch                    int64
+	cacheBaseline                 map[string]string
+	cacheRevisions                map[string]int64
 	scanCache                     map[string]cachedScan
 	navigationHistory             map[string]string
 	SortBySize                    bool
@@ -64,6 +72,9 @@ type Model struct {
 	Results                       []cleanup.Result
 	Confirmed                     []cleanup.Target
 	ConfirmedMode                 config.DeleteMode
+	cleanupAttempted              []cleanup.Target
+	exclusionQueue                []cleanup.Target
+	exclusionDelete               bool
 	Analyze                       func(context.Context, string, []string, func(scan.Progress)) scan.Snapshot
 	Trash, Remove                 cleanup.Runner
 	Explain                       func(context.Context, explain.Request) (string, error)
@@ -76,17 +87,20 @@ func New(root string, settings config.Settings, g *policy.Guard, configPath stri
 	}
 	m := &Model{Settings: settings, ConfigPath: configPath, Guard: g, Screen: "list", Width: 100, Height: 30, Selected: map[string]cleanup.Target{}, Analyze: scan.AnalyzeWithProgress, Trash: cleanup.SystemTrash, Remove: cleanup.SystemRemove}
 	m.Explain = explain.Run
+	m.loadScanCache()
 	m.navigate(root)
 	return m
 }
 func (m *Model) Masks() []string { return m.Settings.Masks }
 func (m *Model) invalidate() {
 	m.scanCache = nil
+	m.clearSavedScans()
 	m.resetScan()
 }
 func (m *Model) resetScan() {
 	m.Snapshot = scan.Snapshot{}
 	m.Scanned = false
+	m.RestoredScan = false
 	m.LastScanAt = time.Time{}
 	m.Selected = map[string]cleanup.Target{}
 	m.sortEntries()
@@ -241,9 +255,18 @@ func (m *Model) Apply(e Event) {
 	case "explain":
 		m.applyExplanation(e)
 	case "scan":
+		if err := m.validateScanCacheToken(e.cacheToken); err != nil {
+			e.Snapshot.Err = err
+		}
 		m.Screen = "list"
 		m.resetScan()
+		if e.Snapshot.Err == errCacheConflict {
+			m.restoreScan()
+			m.Message = "Scan result discarded because saved sizes changed in another session; rescan."
+			break
+		}
 		delete(m.scanCache, m.Root)
+		m.persistScanCache()
 		if cancelRequested && e.Snapshot.Err == nil {
 			e.Snapshot.Err = context.Canceled
 		}
@@ -269,7 +292,7 @@ func (m *Model) Apply(e Event) {
 			m.Snapshot = copySnapshot(e.Snapshot)
 			m.Scanned = true
 			m.LastScanAt = time.Now()
-			m.rememberScan(observed)
+			m.rememberScan(observed, e.cacheToken)
 			m.sortEntries()
 		}
 	case "preview":
@@ -283,18 +306,8 @@ func (m *Model) Apply(e Event) {
 			m.Preview = e.Preview
 			m.Screen = "preview"
 		}
-	case "cleanup":
-		m.Results = e.Results
-		m.invalidate()
-		es, err := scan.List(m.Root)
-		m.Entries = es
-		m.sortEntries()
-		m.Cursor = 0
-		m.normalizeCursor()
-		m.Screen = "results"
-		if err != nil {
-			m.Message = "Could not refresh directory: " + err.Error()
-		}
+	case "cleanup", "cleanup-override":
+		m.applyCleanupResult(e, cancelRequested)
 	}
 }
 func (m *Model) Key(k string) Job {
@@ -310,6 +323,9 @@ func (m *Model) Key(k string) Job {
 			m.Message = "Cancelling; waiting for the operation to finish..."
 		}
 		return nil
+	}
+	if m.Screen == "exclusion-confirm" && k != "ctrl+c" {
+		return m.exclusionConfirmationKey(k)
 	}
 	if k == "ctrl+c" {
 		m.Quit = true
@@ -413,12 +429,16 @@ func (m *Model) Key(k string) Job {
 			mailbox := &progressMailbox{}
 			m.progress, m.Progress, m.Elapsed = mailbox, scan.Progress{}, 0
 			m.startedAt = time.Now()
+			verified := m.refreshRootCache(m.Root)
+			delete(m.scanCache, m.Root)
+			m.persistScanCache()
+			token := &scanCacheToken{verified: verified, root: root, epoch: m.cacheEpoch, revision: m.cacheRevisions[root]}
 			return m.start("scanning", func(ctx context.Context) Event {
 				observed, err := captureScanObservation(ctx, root)
 				if err != nil {
-					return Event{Kind: "scan", Snapshot: scan.Snapshot{Err: err}}
+					return Event{Kind: "scan", Snapshot: scan.Snapshot{Err: err}, cacheToken: token}
 				}
-				return Event{Kind: "scan", Snapshot: analyze(ctx, root, masks, mailbox.publish), scanObserved: observed}
+				return Event{Kind: "scan", Snapshot: analyze(ctx, root, masks, mailbox.publish), scanObserved: observed, cacheToken: token}
 			})
 		}
 		return nil
@@ -427,6 +447,13 @@ func (m *Model) Key(k string) Job {
 			ts := append([]cleanup.Target(nil), m.Confirmed...)
 			mode := m.ConfirmedMode
 			g := m.Guard
+			m.cleanupAttempted = ts
+			m.exclusionQueue = nil
+			if !m.beginCleanupCache(ts) {
+				m.Offset = 0
+				m.Message = "Could not invalidate saved sizes; cleanup was not started. Retry when cache storage is available."
+				return nil
+			}
 			trash, remove := m.Trash, m.Remove
 			return m.start("cleaning", func(ctx context.Context) Event {
 				return Event{Kind: "cleanup", Results: cleanup.Execute(ctx, mode, ts, g, trash, remove)}

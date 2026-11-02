@@ -11,7 +11,7 @@
 ## Safety invariants
 
 - Scanning is explicit. Never start cleanup automatically or treat an explanation as authorization to delete.
-- Only manually selected items are cleaned, after confirmation. Preserve protected-path and object-identity checks, and ensure exclusions block matching descendants as specified.
+- Only manually selected items are cleaned, after confirmation. Preserve protected-path and object-identity checks. Exclusions block matching descendants by default; a selected folder with excluded descendants may be retried only after a separate explicit per-folder confirmation to include all excluded contents. This override is never global or saved, and never bypasses protected-path or identity checks.
 - A Trash failure must never fall back to permanent deletion. Preserve per-item reports and cancellation behavior.
 - Keep cache invalidation aligned with scan, exclusion, cleanup, and filesystem identity changes. Do not claim cached sizes are real-time measurements.
 - AI explanations require an explicit read-access confirmation. The prompt instructions stay in English; `explain_language` selects only the answer language. Keep CLI execution bounded, classify failures without exposing raw logs, and terminate child process groups on cancellation. Read-only command permissions are not a guarantee of complete isolation or a selected-path OS read boundary.
@@ -19,13 +19,17 @@
 
 ## Development and checks
 
-- Run focused package tests while iterating; before reporting a broad change complete, run:
+- For scan-cache iteration, use `./scripts/check.sh quick`. It runs focused tests in `internal/ui/state` matching `SQLite|ScanCache|Cleanup`.
+- For changes in other packages, use the focused package test command while iterating.
+- For broad changes, before merging, or before a release, run `./scripts/check.sh full`. It runs:
 
   ```sh
   go test -race ./...
   go vet ./...
   go build -o diskcleaner ./cmd/diskcleaner
   ```
+
+- Do not rerun the full checks for documentation-only or small cosmetic changes unless they affect risk or a release gate.
 
 - Do not claim macOS 26 or native Intel runtime support, notarization, or successful real Trash movement unless those checks were actually performed.
 - Keep docs aligned with the current behavior and evidence. Historical validation notes must remain clearly marked; do not turn old test counts or platform checks into current claims.

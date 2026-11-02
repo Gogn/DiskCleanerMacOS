@@ -71,9 +71,9 @@ The app opens directly in the filesystem browser at your home directory, without
 | `p` / `d` | Optional preview / cleanup confirmation |
 | `?` / `q` | Help / quit from the browser |
 
-Opening folders never starts a scan or cleanup. Sizes are last-scan snapshots, not live measurements. Cleanup affects only manually selected items after confirmation; checks and deletion are not atomic, and cancellation cannot undo changes already made. A Trash failure never falls back to permanent deletion.
+Opening folders never starts a scan or cleanup. Sizes are last-scan snapshots, not live measurements. Saved sizes may be restored after restarting the app when the folder and entries still match, but files may have changed since the scan; press `s` to refresh before relying on them. Cleanup affects only manually selected items after confirmation; checks and deletion are not atomic, and cancellation cannot undo changes already made. A Trash failure never falls back to permanent deletion.
 
-See the [user guide](docs/usage.md) for all keys, path entry, session cache, exclusions, AI read access and cleanup safeguards. Settings are saved to `~/Library/Application Support/DiskCleaner/config.json`.
+See the [user guide](docs/usage.md) for all keys, path entry, saved scan results, exclusions, AI read access and cleanup safeguards. Settings are saved in `~/Library/Application Support/DiskCleaner/config.json`; scan snapshots are stored in the private SQLite database `scan-cache.sqlite` beside it.
 
 ## Documentation and development
 
@@ -85,11 +85,9 @@ See the [user guide](docs/usage.md) for all keys, path entry, session cache, exc
 
 Current local verification is recorded separately from published-release evidence; macOS 26, native Intel runtime support and real Trash movement still have open release gates.
 
-```sh
-go test ./...
-go test -race ./...
-go vet ./...
-```
+For scan-cache iteration, run `./scripts/check.sh quick`. It runs focused `internal/ui/state` tests whose names match `SQLite|ScanCache|Cleanup`. For changes in other packages, run the focused package test command while iterating.
+
+Run `./scripts/check.sh full` for broad changes and before merging or releasing. It runs `go test -race ./...`, `go vet ./...`, and builds `./cmd/diskcleaner`. Documentation-only and small cosmetic changes do not require repeating the full checks unless they affect risk or a release gate.
 
 ## License
 
